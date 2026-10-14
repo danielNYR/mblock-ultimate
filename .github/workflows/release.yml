@@ -33,7 +33,7 @@ jobs:
         run: >
           npx --yes web-ext@10 sign --source-dir extension --artifacts-dir dist
           --channel unlisted --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: dist/*
           generate_release_notes: true
