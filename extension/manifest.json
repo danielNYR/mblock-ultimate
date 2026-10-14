@@ -1,0 +1,86 @@
+{
+  "manifest_version": 2,
+  "name": "MBlock Ultimate",
+  "author": "Moldhea",
+  "version": "1.3.0",
+  "description": "Bloquea anuncios (YouTube, Facebook y cualquier sitio), popups y redirecciones de adware, y rechaza banners de cookies con sesiones fantasma.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "mblock-ultimate@moldhea.com",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "64": "icons/icon-64.png",
+    "96": "icons/icon-96.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": [
+    "webRequest",
+    "webRequestBlocking",
+    "webNavigation",
+    "tabs",
+    "storage",
+    "cookies",
+    "browsingData",
+    "alarms",
+    "scripting",
+    "unlimitedStorage",
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "lib/domain.js",
+      "lib/defaults.js",
+      "lib/lists.js",
+      "lib/filters.js",
+      "background.js"
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["lib/domain.js", "lib/defaults.js", "content/guard.js", "content/cosmetic.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/consent.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": ["*://*.youtube.com/*"],
+      "js": ["content/youtube.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["content/facebook.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "browser_action": {
+    "default_title": "MBlock Ultimate",
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "64": "icons/icon-64.png"
+    }
+  },
+  "web_accessible_resources": ["blocked/blocked.html"],
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  }
+}

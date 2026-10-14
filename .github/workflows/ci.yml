@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pruebas unitarias
+        run: npm test
+      - name: Filtros de la comunidad compatibles con el motor
+        run: npm run check-lists
+      - name: Sintaxis de todos los scripts
+        run: for f in $(find extension -name '*.js'); do node --check "$f"; done
+      - name: web-ext lint
+        run: npm run lint -- --warnings-as-errors

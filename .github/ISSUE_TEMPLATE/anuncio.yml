@@ -1,0 +1,40 @@
+name: Anuncio o popup no bloqueado
+description: Un anuncio, popup o redirección que la extensión dejó pasar
+labels: [filtro]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Dirección de la página
+      description: Sitio donde apareció (puedes omitir datos personales de la URL)
+    validations:
+      required: true
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo
+      options:
+        - Anuncio visible en la página
+        - Popup / pestaña nueva
+        - Redirección a otro sitio
+        - Anuncio de YouTube
+        - Publicación patrocinada de Facebook
+        - Otro
+    validations:
+      required: true
+  - type: input
+    id: destino
+    attributes:
+      label: Dominio del anuncio o destino (si lo sabes)
+      placeholder: ej. popads.net
+  - type: input
+    id: version
+    attributes:
+      label: Versión de la extensión y de Firefox
+      placeholder: ej. 1.1.0 / Firefox 145
+    validations:
+      required: true
+  - type: textarea
+    id: detalle
+    attributes:
+      label: Pasos y capturas

@@ -1,0 +1,5 @@
+! Excepciones de la comunidad (sintaxis ABP / uBlock Origin).
+! Úsalas cuando una lista suscrita rompe un sitio legítimo. Ejemplos:
+!   @@||cdn.ejemplo.com^$script,domain=ejemplo.com
+!   ejemplo.com#@#.banner-legitimo
+! Explica en un comentario qué se rompía y enlaza el issue.

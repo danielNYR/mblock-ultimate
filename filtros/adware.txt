@@ -1,0 +1,40 @@
+! Dominios de adware / popunders aportados por la comunidad.
+! Un dominio por línea (incluye subdominios). Agrega un comentario con el
+! sitio donde lo viste, p. ej.:  ! visto en ejemplo-streaming.xyz (#123)
+popads.net
+popcash.net
+propellerads.com
+propellerclick.com
+onclickads.net
+onclkds.com
+onclickmax.com
+adsterra.com
+highperformanceformat.com
+profitabledisplaynetwork.com
+effectiveratecpm.com
+exoclick.com
+exosrv.com
+exdynsrv.com
+juicyads.com
+hilltopads.net
+hilltopads.com
+clickadu.com
+adcash.com
+popmyads.com
+realsrv.com
+pushame.com
+richpush.co
+evadav.com
+galaksion.com
+admaven.com
+ad-maven.com
+adspyglass.com
+clickaine.com
+popunder.net
+popmonetizer.com
+monetag.com
+zeropark.com
+pemsrv.com
+oclasrv.com
+acint.net
+betteradsystem.com

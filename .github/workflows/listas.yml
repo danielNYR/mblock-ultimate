@@ -1,0 +1,33 @@
+# Cuando cambia algo en filtros/, recompila listas/mblock.txt y abre un PR.
+# Las extensiones que se suscriben a la lista de la comunidad la descargan
+# desde la URL "raw" del repositorio (se revisa cada 2 días).
+name: Listas
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["filtros/**", "scripts/build-lists.mjs"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm run build-lists
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          branch: bot/actualizar-listas
+          commit-message: "listas: actualización automática"
+          title: "Actualización automática de la lista de la comunidad"
+          body: |
+            `listas/mblock.txt` recompilada a partir de `filtros/`.
+          labels: listas
+          delete-branch: true

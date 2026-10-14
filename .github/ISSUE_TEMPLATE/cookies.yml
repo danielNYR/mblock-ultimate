@@ -1,0 +1,23 @@
+name: Banner de cookies no manejado
+description: Un aviso de cookies que la extensión no rechazó ni ocultó
+labels: [cookies]
+body:
+  - type: input
+    id: url
+    attributes:
+      label: Dirección de la página
+    validations:
+      required: true
+  - type: input
+    id: cmp
+    attributes:
+      label: Proveedor del banner (si lo sabes)
+      placeholder: ej. OneTrust, Cookiebot, Didomi…
+  - type: input
+    id: rechazar
+    attributes:
+      label: Texto exacto del botón de rechazar (si existe)
+  - type: textarea
+    id: detalle
+    attributes:
+      label: Captura o selector CSS del banner

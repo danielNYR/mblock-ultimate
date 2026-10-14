@@ -1,0 +1,22 @@
+:root {
+  --bg: #ffffff; --fg: #1f1f1f; --muted: #666; --card: #f2f2f2; --accent: #1565c0; --border: #ccc;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #1e1e22; --fg: #eee; --muted: #aaa; --card: #2c2c32; --border: #444; --accent: #1e88e5; }
+}
+body { font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); margin: 0; }
+h1 { font-size: 16px; margin: 0 0 8px; color: var(--accent); }
+.brand { display: flex; align-items: center; gap: 8px; }
+h2 { font-size: 15px; margin: 24px 0 6px; }
+.muted { color: var(--muted); font-size: 12px; }
+.switch { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+button {
+  font: inherit; padding: 7px 12px; border-radius: 6px; border: 0; cursor: pointer;
+  background: var(--accent); color: #fff;
+}
+button.secondary { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
+button:disabled { opacity: .5; cursor: default; }
+textarea {
+  width: 100%; box-sizing: border-box; min-height: 160px; font: 13px/1.4 ui-monospace, monospace;
+  background: var(--card); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+}

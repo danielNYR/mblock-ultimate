@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>MBlock Ultimate · Opciones</title>
+  <link rel="stylesheet" href="common.css">
+  <style>
+    main { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+    h1 { font-size: 22px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+    #status { color: var(--accent); }
+    .list { display: grid; grid-template-columns: auto 1fr; gap: 0 8px; align-items: start; padding: 6px 0; border-bottom: 1px solid var(--border); }
+    .list .muted { grid-column: 2; }
+    h3 { font-size: 14px; margin: 18px 0 4px; }
+    .group { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 14px 0 2px; }
+  </style>
+</head>
+<body>
+<main>
+  <h1 class="brand"><img src="../icons/icon-64.png" alt="" width="36" height="36"> MBlock Ultimate · Opciones</h1>
+
+  <h2>Funciones</h2>
+  <label class="switch"><input type="checkbox" data-key="enabled"> Extensión activada (interruptor global)</label>
+  <label class="switch"><input type="checkbox" data-key="adBlock"> Bloquear anuncios y rastreadores</label>
+  <label class="switch"><input type="checkbox" data-key="scriptlets"> Scriptlets de las listas (evitan avisos de «desactiva tu bloqueador» y anuncios difíciles)</label>
+  <label class="switch"><input type="checkbox" data-key="redirectGuard"> Bloquear popups y redirecciones a dominios no seguros</label>
+  <label class="switch"><input type="checkbox" data-key="localNetGuard"> Impedir que los sitios accedan a mi red local / localhost</label>
+  <label class="switch"><input type="checkbox" data-key="blockNotifications"> Negar solicitudes de notificaciones en sitios no seguros</label>
+  <label class="switch"><input type="checkbox" data-key="youtube"> Anuncios de YouTube</label>
+  <label class="switch"><input type="checkbox" data-key="facebook"> Publicaciones patrocinadas de Facebook</label>
+  <h2>Cookies y rastreo</h2>
+  <label class="switch"><input type="checkbox" data-key="consentAuto"> Rechazar automáticamente los banners de cookies</label>
+  <label class="switch"><input type="checkbox" data-key="phantomCookies"> Sesión fantasma: borrar cookies y localStorage del sitio al cerrar la pestaña</label>
+  <label class="switch"><input type="checkbox" data-key="phantomAccept"> Si el sitio solo permite «Aceptar», aceptar en sesión fantasma</label>
+  <label class="switch"><input type="checkbox" data-key="gpc"> Enviar señal Global Privacy Control (no vender / no compartir mis datos)</label>
+  <label class="switch">Considerar excesivas más de <input type="number" min="1" max="500" data-key="cookieLimit" style="width:70px"> cookies por página</label>
+  <p class="muted">La sesión fantasma se activa cuando un sitio muestra un banner de cookies o pone demasiadas cookies.
+    Desde ese momento se descartan las cookies de terceros y, al salir, se borra todo lo que el sitio guardó.
+    Los dominios seguros nunca se borran, para que no pierdas tus sesiones iniciadas.</p>
+
+  <h2>Listas de filtros</h2>
+  <p class="muted">Compatibles con la sintaxis de EasyList / uBlock Origin / AdGuard. Se actualizan solas según lo que indica cada lista.</p>
+  <div id="catalog"></div>
+  <label class="switch"><input type="checkbox" data-key="strictBlocking"> Mostrar advertencia al abrir un sitio bloqueado (malware, phishing, anuncios)</label>
+  <h3>Listas personalizadas</h3>
+  <p class="muted">Una URL <code>https://</code> por línea (por ejemplo, la lista de la comunidad de MBlock).</p>
+  <textarea id="customListUrls" spellcheck="false" style="min-height:70px"></textarea>
+  <div class="row">
+    <button id="updateLists" class="secondary">Actualizar todas ahora</button>
+    <span class="muted" id="listsInfo"></span>
+  </div>
+
+  <h2>Dominios seguros</h2>
+  <p class="muted">Un dominio por línea. Incluye sus subdominios (<code>google.com</code> permite <code>accounts.google.com</code>).
+    Son los únicos destinos a los que un sitio puede abrir popups o redirigir sin que hagas clic en un enlace visible.
+    Los sitios de esta lista también se consideran de confianza y no se vigilan.</p>
+  <textarea id="allowlist" spellcheck="false"></textarea>
+
+  <h2>Sitios desactivados</h2>
+  <p class="muted">La extensión no actúa en estos sitios (también se cambia desde el botón de la barra).</p>
+  <textarea id="disabledSites" spellcheck="false"></textarea>
+
+  <h2>Mis filtros</h2>
+  <p class="muted">Un filtro por línea con la misma sintaxis que las listas: <code>ejemplo.com</code> o <code>||ejemplo.com^</code> (bloquear dominio),
+    <code>ejemplo.com##.banner</code> (ocultar elemento), <code>@@||ejemplo.com^</code> (excepción). Las líneas con <code>!</code> son comentarios.</p>
+  <textarea id="customBlock" spellcheck="false"></textarea>
+
+  <div class="row">
+    <button id="save">Guardar</button>
+    <button id="resetStats" class="secondary">Reiniciar contador</button>
+    <span id="status"></span>
+  </div>
+  <p class="muted">Total bloqueado: <b id="total">0</b></p>
+</main>
+<script src="../lib/domain.js"></script>
+<script src="../lib/defaults.js"></script>
+<script src="../lib/lists.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

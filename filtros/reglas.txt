@@ -1,0 +1,7 @@
+! Reglas de la comunidad de MBlock Ultimate (sintaxis ABP / uBlock Origin).
+! Pon aquí filtros de red y cosméticos que las listas grandes no cubren,
+! sobre todo para sitios de streaming y descargas. Antes de cada regla, deja
+! un comentario con el sitio y el issue, p. ej.:
+!   ! sitio-streaming.xyz — overlay sobre el reproductor (#12)
+!   sitio-streaming.xyz##.player-overlay-ad
+!   ||cdn-anuncios.xyz^$third-party

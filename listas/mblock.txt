@@ -1,0 +1,49 @@
+! Title: MBlock Ultimate – Filtros de la comunidad
+! Description: Reglas mantenidas por la comunidad de MBlock Ultimate (Moldhea)
+! Version: 2026.10.14
+! Expires: 2 days
+! License: GPL-3.0-or-later
+! Archivo generado por scripts/build-lists.mjs — no editar a mano; edita filtros/
+
+! ---------- Dominios de adware ----------
+||acint.net^
+||ad-maven.com^
+||adcash.com^
+||admaven.com^
+||adspyglass.com^
+||adsterra.com^
+||betteradsystem.com^
+||clickadu.com^
+||clickaine.com^
+||effectiveratecpm.com^
+||evadav.com^
+||exdynsrv.com^
+||exoclick.com^
+||exosrv.com^
+||galaksion.com^
+||highperformanceformat.com^
+||hilltopads.com^
+||hilltopads.net^
+||juicyads.com^
+||monetag.com^
+||oclasrv.com^
+||onclickads.net^
+||onclickmax.com^
+||onclkds.com^
+||pemsrv.com^
+||popads.net^
+||popcash.net^
+||popmonetizer.com^
+||popmyads.com^
+||popunder.net^
+||profitabledisplaynetwork.com^
+||propellerads.com^
+||propellerclick.com^
+||pushame.com^
+||realsrv.com^
+||richpush.co^
+||zeropark.com^
+
+! ---------- Reglas ----------
+
+! ---------- Excepciones ----------
