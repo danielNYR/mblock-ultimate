@@ -20,7 +20,7 @@ REPO="${1:-mblock-ultimate}"
 echo "→ Repositorio: $REPO (mantenedor: @$LOGIN)"
 
 # 1. CODEOWNERS con tu usuario
-perl -pi -e "s/\@MANTENEDOR\b/\@$LOGIN/g" .github/CODEOWNERS
+perl -pi -e "s/^\* \@MANTENEDOR\b/* \@$LOGIN/" .github/CODEOWNERS
 perl -pi -e "s#<usuario>/<repo>#$REPO#g" CONTRIBUTING.md
 if ! git diff --quiet -- .github/CODEOWNERS CONTRIBUTING.md 2>/dev/null; then
   echo "  CODEOWNERS y CONTRIBUTING.md actualizados con tu usuario: haz commit de esos cambios."

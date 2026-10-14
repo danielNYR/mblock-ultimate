@@ -40,10 +40,10 @@ El repositorio es abierto, pero **todo cambio necesita la aprobación del manten
 
 ## Lista de la comunidad
 
-Los filtros de `filtros/` se publican compilados en `listas/mblock.txt`. Para usarlos, agrega esta URL en Opciones → «Listas personalizadas»:
+Los filtros de `filtros/` se publican compilados en `listas/mblock.txt` y la extensión se suscribe a ellos por defecto («MBlock Ultimate – Filtros de la comunidad» en Opciones). La URL es:
 
 ```
-https://raw.githubusercontent.com/<usuario>/<repo>/main/listas/mblock.txt
+https://raw.githubusercontent.com/danielNYR/mblock-ultimate/main/listas/mblock.txt
 ```
 
 ## Reglas

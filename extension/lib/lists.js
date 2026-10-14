@@ -94,6 +94,8 @@ const BUILTIN_FILTERS = [].concat(
 
 // Listas suscribibles. "on" = activada por defecto.
 const LIST_CATALOG = [
+  { id: "mblock", name: "MBlock Ultimate – Filtros de la comunidad", group: "MBlock", on: true,
+    url: "https://raw.githubusercontent.com/danielNYR/mblock-ultimate/main/listas/mblock.txt" },
   { id: "easylist", name: "EasyList", group: "Anuncios", on: true,
     url: "https://easylist.to/easylist/easylist.txt" },
   { id: "easylist-es", name: "EasyList Spanish", group: "Anuncios (regional)", on: true,
