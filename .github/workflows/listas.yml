@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 22
       - run: npm run build-lists
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           branch: bot/actualizar-listas
           commit-message: "listas: actualización automática"
