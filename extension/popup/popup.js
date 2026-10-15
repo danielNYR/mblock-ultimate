@@ -9,8 +9,8 @@
     $("host").textContent = s.host || "(página interna)";
     $("siteToggle").checked = s.siteEnabled;
     $("siteToggle").disabled = !s.host || !s.enabled;
-    $("tabCount").textContent = s.tabCount;
-    $("total").textContent = s.total;
+    $("tabCount").textContent = s.tabCount.toLocaleString();
+    $("total").textContent = s.total.toLocaleString();
     $("trustedNote").hidden = !s.trusted;
     $("phantom").hidden = !s.phantom;
     $("phantomReason").textContent = s.phantom;

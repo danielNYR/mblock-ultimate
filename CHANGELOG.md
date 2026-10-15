@@ -6,9 +6,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **MENOR:** funciones nuevas.
 - **PARCHE:** correcciones.
 
-## [Sin publicar]
+## [1.3.1] – 2026-10-14
+
+Primera versión preparada para publicarse en addons.mozilla.org.
 
 ### Agregado
+- Ficha para addons.mozilla.org: descripción en español e inglés, capturas, notas para los revisores y política de privacidad (`PRIVACIDAD.md`).
+- La publicación en addons.mozilla.org (canal *listed*) se hace desde el workflow de release; las notas de la versión salen del CHANGELOG.
 - Controles de calidad obligatorios en cada pull request:
   - pruebas con cobertura mínima del 80 % en líneas, ramas y funciones;
   - ESLint con las reglas de SonarSource;
@@ -23,6 +27,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 ### Cambiado
 - Refactorización del motor de filtros, del background, de los content scripts y de la biblioteca de scriptlets para cumplir las reglas de Sonar (complejidad cognitiva, expresiones regulares sin backtracking, excepciones explicadas). El comportamiento no cambia y se verificó en Firefox.
 - `web-ext` se usa con `npx` y versión fija: sus dependencias tenían vulnerabilidades y ya no forman parte del proyecto.
+
+### Corregido
+- Opciones: las listas regionales ya no parten el grupo «Anuncios» en dos.
+- Los contadores muestran separador de miles.
 
 ## [1.3.0] – 2026-10-14
 
@@ -68,6 +76,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - Guardia de popups y redirecciones con lista de dominios seguros.
 - Popup con contador y página de opciones.
 
+[1.3.1]: ../../releases/tag/v1.3.1
 [1.3.0]: ../../releases/tag/v1.3.0
 [1.2.1]: ../../releases/tag/v1.2.1
 [1.2.0]: ../../releases/tag/v1.2.0

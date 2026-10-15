@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img alt="Versión 1.3.0" src="https://img.shields.io/badge/versi%C3%B3n-1.3.0-1565c0">
+  <img alt="Versión 1.3.1" src="https://img.shields.io/badge/versi%C3%B3n-1.3.1-1565c0">
   <img alt="Firefox 142+" src="https://img.shields.io/badge/Firefox-142%2B-ff7139?logo=firefoxbrowser&logoColor=white">
   <img alt="Licencia GPL-3.0" src="https://img.shields.io/badge/licencia-GPL--3.0-0b3a75">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-ninguna-2e7d32">
@@ -52,7 +52,7 @@ La referencia completa de cada función está en [docs/FUNCIONES.md](docs/FUNCIO
 
 ## Privacidad
 
-MBlock Ultimate **no recopila ni envía ningún dato**. Las únicas conexiones que hace son las descargas de las listas de filtros que tienes activadas, sin cookies ni identificadores. Todo lo demás ocurre en tu navegador.
+MBlock Ultimate **no recopila ni envía ningún dato**. Las únicas conexiones que hace son las descargas de las listas de filtros que tienes activadas, sin cookies ni identificadores. Todo lo demás ocurre en tu navegador. Más detalles en la [política de privacidad](PRIVACIDAD.md).
 
 ## Limitaciones
 
@@ -79,7 +79,7 @@ Cada pull request debe pasar pruebas, cobertura ≥ 80 %, reglas de Sonar, detec
 
 ## Versiones
 
-La versión actual es **1.3.0**. Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md). Al publicar una etiqueta `vX.Y.Z`, se genera automáticamente una versión firmada.
+La versión actual es **1.3.1**. Los cambios de cada versión están en [CHANGELOG.md](CHANGELOG.md). Al publicar una etiqueta `vX.Y.Z`, se genera automáticamente una versión firmada.
 
 ## Créditos y licencia
 
