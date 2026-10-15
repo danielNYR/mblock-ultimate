@@ -21,7 +21,7 @@ function fmtDate(t) {
 function countText(st) {
   if (!st) return "";
   const ignored = st.ignored ? ` (${st.ignored} no soportados)` : "";
-  return `${st.network + st.cosmetic + (st.scriptlets || 0)} filtros${ignored} · `;
+  return `${(st.network + st.cosmetic + (st.scriptlets || 0)).toLocaleString()} filtros${ignored} · `;
 }
 
 function listInfo(st, m) {
@@ -85,7 +85,7 @@ async function load() {
     else el.value = s[el.dataset.key];
   }
   for (const k of LISTS.concat(URL_LISTS)) $(k).value = (s[k] || []).join("\n");
-  $("total").textContent = s.totalBlocked || 0;
+  $("total").textContent = (s.totalBlocked || 0).toLocaleString();
 }
 
 for (const el of document.querySelectorAll("input[data-key]")) {
