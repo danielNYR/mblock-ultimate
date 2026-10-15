@@ -1,0 +1,37 @@
+# Análisis en SonarQube Cloud con su Quality Gate. Se activa al agregar el
+# secreto SONAR_TOKEN (ver GOBERNANZA.md); sin él, el job se omite sin fallar.
+# Las reglas de Sonar se aplican siempre en el job "lint" (eslint-plugin-sonarjs).
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sonar:
+    name: sonar
+    runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - name: ¿Hay token de SonarQube Cloud?
+        id: token
+        run: echo "present=${{ env.SONAR_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        if: steps.token.outputs.present == 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - if: steps.token.outputs.present == 'true'
+        run: npm ci && npm run coverage
+      - name: Análisis y Quality Gate
+        if: steps.token.outputs.present == 'true'
+        uses: SonarSource/sonarqube-scan-action@v8

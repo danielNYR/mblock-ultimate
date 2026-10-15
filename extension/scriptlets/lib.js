@@ -26,7 +26,8 @@
     setTimeout: win.setTimeout,
     Promise: win.Promise
   };
-  const token = () => String.fromCharCode(Date.now() % 26 + 97) + Math.floor(Math.random() * 982451653 + 982451653).toString(36);
+  // Texto aleatorio para los errores que lanzan los scriptlets (no es material criptográfico).
+  const token = () => "mbs" + win.crypto.getRandomValues(new Uint32Array(2)).join("").slice(0, 12);
 
   // ---------- utilidades ----------
 
@@ -112,43 +113,73 @@
   }
 
   // Borra rutas tipo "a.b.c", "[].x", "a.*.b" de un objeto JSON.
+  const isObj = o => o !== null && typeof o === "object";
+  const ownKey = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const WILDCARDS = new Set(["[]", "*", "[-]"]);
+
+  function splitPath(path) {
+    const i = path.indexOf(".");
+    return i < 0 ? [path, ""] : [path.slice(0, i), path.slice(i + 1)];
+  }
+
+  // ¿Existe la ruta "a.b.c" / "[].x" en el objeto?
+  function jsonHas(o, path) {
+    if (path === "") return true;
+    if (!isObj(o)) return false;
+    const [key, rest] = splitPath(path);
+    if (WILDCARDS.has(key)) return Object.keys(o).some(k => jsonHas(o[k], rest));
+    return ownKey(o, key) && jsonHas(o[key], rest);
+  }
+
+  // "[-]": elimina del arreglo los elementos que contienen la ruta restante
+  function jsonDelArrayItems(o, rest) {
+    if (!Array.isArray(o)) return false;
+    let done = false;
+    for (let k = o.length - 1; k >= 0; k--) {
+      if (!rest || jsonHas(o[k], rest)) { o.splice(k, 1); done = true; }
+    }
+    return done;
+  }
+
+  function jsonDelEach(o, rest) {
+    let done = false;
+    for (const k of Object.keys(o)) {
+      if (rest) done = jsonDel(o[k], rest) || done;
+      else { delete o[k]; done = true; }
+    }
+    return done;
+  }
+
+  function jsonDel(o, path) {
+    if (!isObj(o)) return false;
+    const [key, rest] = splitPath(path);
+    if (key === "[-]") return jsonDelArrayItems(o, rest);
+    if (key === "[]" || key === "*") return jsonDelEach(o, rest);
+    if (!ownKey(o, key)) return false;
+    if (rest) return jsonDel(o[key], rest);
+    delete o[key];
+    return true;
+  }
+
+  const words = str => (str || "").split(/\s+/).filter(Boolean);
+
+  // Borra rutas tipo "a.b.c", "[].x", "a.*.b", "[-].x" si están todas las rutas requeridas.
   function pruneObject(obj, toRemove, required) {
-    if (obj === null || typeof obj !== "object") return obj;
-    const has = (o, path) => {
-      if (path === "") return true;
-      const i = path.indexOf(".");
-      const key = i < 0 ? path : path.slice(0, i);
-      const rest = i < 0 ? "" : path.slice(i + 1);
-      if (o === null || typeof o !== "object") return false;
-      if (key === "[]" || key === "*" || key === "[-]") return Object.keys(o).some(k => has(o[k], rest));
-      return Object.prototype.hasOwnProperty.call(o, key) && has(o[key], rest);
-    };
-    const del = (o, path) => {
-      if (o === null || typeof o !== "object") return false;
-      const i = path.indexOf(".");
-      const key = i < 0 ? path : path.slice(0, i);
-      const rest = i < 0 ? "" : path.slice(i + 1);
-      let done = false;
-      if (key === "[-]") {
-        // elimina del arreglo los elementos que contienen la ruta restante
-        if (!Array.isArray(o)) return false;
-        for (let k = o.length - 1; k >= 0; k--) {
-          if (!rest || has(o[k], rest)) { o.splice(k, 1); done = true; }
-        }
-        return done;
-      }
-      if (key === "[]" || key === "*") {
-        for (const k of Object.keys(o)) done = (rest ? del(o[k], rest) : (delete o[k], true)) || done;
-        return done;
-      }
-      if (!Object.prototype.hasOwnProperty.call(o, key)) return false;
-      if (!rest) { delete o[key]; return true; }
-      return del(o[key], rest);
-    };
-    const req = (required || "").split(/\s+/).filter(Boolean);
-    if (req.length && !req.every(p => has(obj, p))) return obj;
-    for (const p of (toRemove || "").split(/\s+/).filter(Boolean)) del(obj, p);
+    if (!isObj(obj)) return obj;
+    const req = words(required);
+    if (req.length && !req.every(p => jsonHas(obj, p))) return obj;
+    for (const p of words(toRemove)) jsonDel(obj, p);
     return obj;
+  }
+
+  const splitPipes = str => str.split("|").map(x => x.trim()).filter(Boolean);
+
+  function queryAll(selector) {
+    try {
+      return doc.querySelectorAll(selector);
+    } catch {
+      return []; // selector inválido en el filtro
+    }
   }
 
   function onDomReady(fn) {
@@ -203,15 +234,22 @@
     N.defineProperty(owner, prop, { configurable: true, set() { throw new N.ReferenceError(t); } });
   };
 
+  // inlineScript: código inline de la página; injectedScript: código sin archivo (eval, etc.)
+  function stackMatcher(needle) {
+    if (needle === "injectedScript") {
+      return lines => lines.some(l => l.includes("<anonymous>") || l.trim() === "" || l.trim() === "@");
+    }
+    const re = patternToRegex(needle === "inlineScript" ? location.href.split("#")[0] : needle);
+    return lines => re.test(lines.join("\n"));
+  }
+
   S["abort-on-stack-trace"] = function (chain, needle) {
     if (!chain) return;
-    const re = needle === "inlineScript" ? patternToRegex(location.href.split("#")[0])
-      : needle === "injectedScript" ? /<anonymous>|^\s*@?\s*$/m
-      : patternToRegex(needle);
     const t = token();
+    const matches = stackMatcher(needle);
     const check = () => {
-      const stack = (new N.Error().stack || "").split("\n").slice(2).join("\n");
-      if (re.test(stack)) throw new N.ReferenceError(t);
+      const lines = (new N.Error().stack || "").split("\n").slice(2);
+      if (matches(lines)) throw new N.ReferenceError(t);
     };
     trapChain(win, chain, (owner, prop) => {
       let value = owner[prop];
@@ -275,7 +313,8 @@
       if ((needle === undefined || needle === "") && (delay === undefined || delay === "")) return;
       const n = negatable(needle || "");
       const notDelay = typeof delay === "string" && delay.startsWith("!");
-      const delayValue = delay ? parseInt(notDelay ? delay.slice(1) : delay, 10) : NaN;
+      const delayText = notDelay ? delay.slice(1) : delay;
+      const delayValue = delayText ? parseInt(delayText, 10) : NaN;
       wrapMethod(win, name, (target, thisArg, args) => {
         const code = String(args[0]);
         const needleOk = !needle || n.re.test(code) !== n.not;
@@ -336,16 +375,23 @@
     });
   };
 
+  const FETCH_BODIES = { emptyArray: "[]", emptyObj: "{}" };
+
+  function fetchDetails(args) {
+    try {
+      const r = args[0] instanceof win.Request ? args[0] : null;
+      const base = r ? { url: r.url, method: r.method } : { url: String(args[0]), method: "GET" };
+      return Object.assign(base, args[1] instanceof Object ? args[1] : {});
+    } catch {
+      return { url: String(args[0]) }; // argumentos raros: se compara solo la URL
+    }
+  }
+
   S["no-fetch-if"] = function (props, body) {
     if (props === undefined) return;
     wrapMethod(win, "fetch", (target, thisArg, args) => {
-      let details;
-      try {
-        const r = args[0] instanceof win.Request ? args[0] : null;
-        details = Object.assign({ url: r ? r.url : String(args[0]), method: r ? r.method : "GET" }, args[1] instanceof Object ? args[1] : {});
-      } catch (e) { details = { url: String(args[0]) }; }
-      if (!matchesProps(props, details)) return N.Reflect.apply(target, thisArg, args);
-      const text = body === "emptyArray" ? "[]" : body === "emptyObj" ? "{}" : "";
+      if (!matchesProps(props, fetchDetails(args))) return N.Reflect.apply(target, thisArg, args);
+      const text = FETCH_BODIES[body] || "";
       return N.Promise.resolve(new N.Response(text, { status: 200, statusText: "OK" }));
     });
   };
@@ -437,7 +483,9 @@
             try {
               const obj = typeof raw === "string" ? N.JSONparse(raw) : raw;
               cache.set(this, pruneObject(obj, toRemove, required));
-            } catch (e) { cache.set(this, null); }
+            } catch {
+              cache.set(this, null); // no es JSON: se deja la respuesta original
+            }
           }
           const pruned = cache.get(this);
           if (pruned === null) return raw;
@@ -470,12 +518,10 @@
 
   S["remove-attr"] = function (attrs, selector, behavior) {
     if (!attrs) return;
-    const list = attrs.split(/\s*\|\s*/).filter(Boolean);
+    const list = splitPipes(attrs);
     const sel = selector || list.map(a => `[${a}]`).join(",");
     const run = () => {
-      let nodes = [];
-      try { nodes = doc.querySelectorAll(sel); } catch (e) { return; }
-      for (const el of nodes) for (const a of list) if (el.hasAttribute(a)) el.removeAttribute(a);
+      for (const el of queryAll(sel)) for (const a of list) el.removeAttribute(a);
     };
     if (behavior && /complete/.test(behavior)) win.addEventListener("load", run, { once: true });
     else onDomReady(() => observeDom(run, /stay/.test(behavior || "")));
@@ -483,12 +529,10 @@
 
   S["remove-class"] = function (classes, selector, behavior) {
     if (!classes) return;
-    const list = classes.split(/\s*\|\s*/).filter(Boolean);
+    const list = splitPipes(classes);
     const sel = selector || list.map(c => "." + CSS.escape(c)).join(",");
     const run = () => {
-      let nodes = [];
-      try { nodes = doc.querySelectorAll(sel); } catch (e) { return; }
-      for (const el of nodes) el.classList.remove(...list);
+      for (const el of queryAll(sel)) el.classList.remove(...list);
     };
     if (behavior && /complete/.test(behavior)) win.addEventListener("load", run, { once: true });
     else onDomReady(() => observeDom(run, /stay/.test(behavior || "")));
@@ -572,9 +616,18 @@
 
   function detectorStub() {
     const stub = {
-      onDetected() { return stub; }, onNotDetected(fn) { try { fn(); } catch (e) { /* página */ } return stub; },
+      onDetected() { return stub; },
+      onNotDetected(fn) {
+        try { fn(); } catch { /* error del código de la página */ }
+        return stub;
+      },
       check() { return stub; }, emitEvent() { return stub; }, clearEvent() { return stub; }, setOption() { return stub; },
-      on(det, fn) { if (!det) try { fn(); } catch (e) { /* página */ } return stub; }
+      on(det, fn) {
+        if (!det) {
+          try { fn(); } catch { /* error del código de la página */ }
+        }
+        return stub;
+      }
     };
     return stub;
   }
@@ -612,9 +665,7 @@
       return m ? a.getAttribute(m[1]) || "" : "";
     };
     const run = () => {
-      let nodes = [];
-      try { nodes = doc.querySelectorAll(selector); } catch (e) { return; }
-      for (const a of nodes) {
+      for (const a of queryAll(selector)) {
         if (a.dataset.mbs === "1") continue;
         const url = extract(a);
         if (/^https?:\/\//.test(url)) { a.setAttribute("href", url); a.dataset.mbs = "1"; }

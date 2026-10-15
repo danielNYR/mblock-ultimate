@@ -35,26 +35,33 @@
     inAd = false;
   }
 
+  // Adelanta el anuncio al final; si la duración no es fiable (streams cosidos), lo acelera.
+  function fastForward(video) {
+    const short = Number.isFinite(video.duration) && video.duration > 0 && video.duration <= MAX_AD_SECONDS;
+    if (!short) {
+      video.playbackRate = 16;
+    } else if (video.currentTime < video.duration - 0.2) {
+      video.currentTime = video.duration - 0.1;
+    }
+  }
+
+  function skipAd(video) {
+    if (!inAd) {
+      inAd = true;
+      saved = { muted: video.muted, rate: video.playbackRate };
+      browser.runtime.sendMessage({ type: "blocked" }).catch(() => {});
+    }
+    video.muted = true;
+    fastForward(video);
+    if (video.paused) video.play().catch(() => {});
+    for (const b of document.querySelectorAll(SKIP)) b.click();
+  }
+
   function handle() {
     if (!enabled || !player) return;
     const video = player.querySelector("video");
-    if (isAd(player) && video) {
-      if (!inAd) {
-        inAd = true;
-        saved = { muted: video.muted, rate: video.playbackRate };
-        browser.runtime.sendMessage({ type: "blocked" }).catch(() => {});
-      }
-      video.muted = true;
-      if (isFinite(video.duration) && video.duration > 0 && video.duration <= MAX_AD_SECONDS) {
-        if (video.currentTime < video.duration - 0.2) video.currentTime = video.duration - 0.1;
-      } else {
-        video.playbackRate = 16;
-      }
-      if (video.paused) video.play().catch(() => {});
-      for (const b of document.querySelectorAll(SKIP)) b.click();
-    } else if (inAd) {
-      restore();
-    }
+    if (isAd(player) && video) skipAd(video);
+    else if (inAd) restore();
     for (const c of document.querySelectorAll(".ytp-ad-overlay-close-button")) c.click();
   }
 

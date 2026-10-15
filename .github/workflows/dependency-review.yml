@@ -1,0 +1,21 @@
+# En cada PR: rechaza dependencias nuevas con vulnerabilidades altas o con
+# licencias incompatibles con la GPL.
+name: Dependencias
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  dependency-review:
+    name: dependency-review
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+          deny-licenses: AGPL-1.0-only, SSPL-1.0, BUSL-1.1, CC-BY-NC-4.0
+          comment-summary-in-pr: never

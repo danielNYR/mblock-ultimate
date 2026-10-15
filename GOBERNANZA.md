@@ -35,12 +35,33 @@ Las reglas no dependen de la buena voluntad: GitHub las hace cumplir, y están v
 
 Para aplicar o volver a aplicar todo esto en GitHub, ejecuta [`scripts/configurar-repo.sh`](scripts/configurar-repo.sh). Para cambiar una regla, edita el JSON de `.github/rulesets/` y vuelve a ejecutar el script.
 
+## Controles de calidad obligatorios
+
+Cada pull request debe pasar estos checks antes de poder fusionarse (están en `required_status_checks` de la regla de `main`):
+
+| Check | Qué exige |
+|---|---|
+| `test` | Todas las pruebas pasan y la cobertura del código de la extensión es **≥ 80 %** en líneas, ramas y funciones (`npm run coverage`). |
+| `lint` | ESLint con las reglas recomendadas de **SonarSource** (`eslint-plugin-sonarjs`) sin errores ni avisos, `web-ext lint` limpio y filtros de la comunidad válidos. |
+| `secrets` | [gitleaks](https://github.com/gitleaks/gitleaks) no encuentra claves, tokens ni contraseñas en el historial. |
+| `audit` | `npm audit` sin vulnerabilidades altas o críticas. |
+| `codeql` | Análisis de seguridad y calidad de GitHub CodeQL. Además, la regla `code_scanning` bloquea la fusión si hay alertas de seguridad altas o errores. |
+
+Otros controles automáticos:
+
+- **Dependency Review:** revisa en cada PR las dependencias nuevas (vulnerabilidades y licencias incompatibles).
+- **Escaneo de secretos de GitHub con bloqueo en push:** rechaza un `git push` que contenga una clave conocida.
+- **Dependabot:** alertas de seguridad y actualizaciones semanales de Actions y npm.
+- **SonarQube Cloud:** opcional, con *Quality Gate*. Se activa al agregar el secreto `SONAR_TOKEN` después de importar el repositorio en [sonarcloud.io](https://sonarcloud.io). La configuración está en `sonar-project.properties`.
+
+Ninguna clave forma parte del código: las credenciales opcionales (`AMO_JWT_*`, `SONAR_TOKEN`) viven solo en los secretos de GitHub Actions.
+
 ## Criterios para aceptar cambios
 
 1. **Privacidad:** ningún cambio puede enviar datos del usuario a terceros ni agregar telemetría.
 2. **Seguridad:** no se aceptan dependencias de ejecución, código ofuscado ni descargas de código remoto. Las listas de filtros son datos, no código.
 3. **Filtros:** cada regla nueva en `filtros/` debe decir dónde se observó el problema, y no puede bloquear sitios completos de contenido legítimo.
-4. **Calidad:** deben pasar `npm test`, `npm run lint` y `npm run check-lists`, y el cambio debe estar probado en Firefox.
+4. **Calidad:** deben pasar los controles de la sección anterior, el código nuevo debe tener pruebas y el cambio debe estar probado en Firefox.
 5. **Alcance:** el objetivo es «navegar seguro en cualquier sitio, en español». No se aceptan funciones para saltarse muros de pago ni anuncios de servicios de pago.
 
 ## Versiones

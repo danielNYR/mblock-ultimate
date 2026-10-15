@@ -4,6 +4,8 @@
 #   - Nada entra a main sin tu aprobación (CODEOWNERS + reglas en .github/rulesets/).
 #   - Los workflows de colaboradores externos esperan tu aprobación antes de ejecutarse.
 #   - Solo tú puedes crear etiquetas vX.Y.Z (es decir, publicar versiones).
+#   - Checks obligatorios (test con cobertura ≥80 %, lint con reglas Sonar, secretos,
+#     auditoría, CodeQL), escaneo de secretos con bloqueo en push y alertas de Dependabot.
 #
 # Uso:  scripts/configurar-repo.sh [nombre | usuario/nombre]   (por defecto: mblock-ultimate)
 # Requiere GitHub CLI con sesión iniciada:  brew install gh && gh auth login
@@ -60,8 +62,17 @@ for file in .github/rulesets/*.json; do
   fi
 done
 
-# 6. Reportes privados de vulnerabilidades (ver SECURITY.md)
+# 6. Seguridad: reportes privados, escaneo de secretos con bloqueo en push y alertas de Dependabot
 gh api -X PUT "repos/$REPO/private-vulnerability-reporting" >/dev/null || true
+gh api -X PATCH "repos/$REPO" --input - >/dev/null <<'JSON' || echo "  Aviso: no se pudo activar el escaneo de secretos"
+{ "security_and_analysis": {
+    "secret_scanning": { "status": "enabled" },
+    "secret_scanning_push_protection": { "status": "enabled" } } }
+JSON
+gh api -X PUT "repos/$REPO/vulnerability-alerts" >/dev/null || true
+gh api -X PUT "repos/$REPO/automated-security-fixes" >/dev/null || true
 
 echo "✓ Listo: https://github.com/$REPO"
-echo "  Recuerda agregar los secretos AMO_JWT_ISSUER y AMO_JWT_SECRET si quieres versiones firmadas automáticamente."
+echo "  Secretos opcionales (Settings → Secrets and variables → Actions):"
+echo "   - AMO_JWT_ISSUER y AMO_JWT_SECRET: versiones firmadas en addons.mozilla.org"
+echo "   - SONAR_TOKEN: análisis en SonarQube Cloud (importa antes el repo en sonarcloud.io)"

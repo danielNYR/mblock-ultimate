@@ -4,11 +4,18 @@
 
 ## Preparar el entorno
 
+Requiere Node 24 o posterior.
+
 ```bash
-npm test          # pruebas unitarias (Node 22+)
-npm run lint      # web-ext lint
-npm start         # abre Firefox con la extensión cargada
+npm ci                # instala las herramientas de desarrollo (versiones fijadas)
+npm test              # pruebas
+npm run coverage      # pruebas + cobertura; falla por debajo del 80 %
+npm run lint          # ESLint con reglas de SonarSource + web-ext lint
+npm run check-lists   # verifica los filtros de la comunidad
+npm start             # abre Firefox con la extensión cargada
 ```
+
+Las pruebas cargan los scripts reales de la extensión en un Firefox simulado: jsdom para las páginas y una API `browser` falsa para el background (`tests/helpers.mjs`). Si agregas código, agrega su prueba; el CI exige al menos un 80 % de cobertura en líneas, ramas y funciones.
 
 También puedes cargar `extension/manifest.json` desde `about:debugging` → «Cargar complemento temporal».
 

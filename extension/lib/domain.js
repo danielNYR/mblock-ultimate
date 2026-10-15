@@ -8,7 +8,8 @@ function hostOf(url) {
     const u = new URL(url);
     if (u.protocol !== "http:" && u.protocol !== "https:") return "";
     return u.hostname.toLowerCase();
-  } catch (e) {
+  } catch {
+    // URL inválida o relativa: no tiene host
     return "";
   }
 }
@@ -30,8 +31,10 @@ function sameSite(a, b) {
 }
 
 function normalizeEntry(entry) {
-  return String(entry || "").trim().toLowerCase()
-    .replace(/^[a-z]+:\/\//, "").replace(/\/.*$/, "").replace(/^\*\./, "").replace(/^\./, "");
+  let s = String(entry || "").trim().toLowerCase().replace(/^[a-z]+:\/\//, "");
+  const slash = s.indexOf("/");
+  if (slash >= 0) s = s.slice(0, slash);
+  return s.replace(/^\*\./, "").replace(/^\./, "");
 }
 
 // true si host es igual a alguna entrada de la lista o subdominio de ella.

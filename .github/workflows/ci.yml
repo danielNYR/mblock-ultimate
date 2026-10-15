@@ -1,3 +1,8 @@
+# Controles obligatorios de cada cambio (los exige la regla "Proteger main"):
+#   test    pruebas + cobertura mínima del 80 % (líneas, ramas y funciones)
+#   lint    ESLint con reglas de SonarSource, web-ext lint y filtros de la comunidad
+#   secrets gitleaks: ninguna clave, token o contraseña en el historial
+#   audit   npm audit sin vulnerabilidades altas o críticas
 name: CI
 
 on:
@@ -8,19 +13,68 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    name: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          node-version: 22
-      - name: Pruebas unitarias
-        run: npm test
-      - name: Filtros de la comunidad compatibles con el motor
-        run: npm run check-lists
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Pruebas con cobertura mínima del 80 %
+        run: npm run coverage
+      - uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          retention-days: 7
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: ESLint + reglas de SonarSource
+        run: npx eslint . --max-warnings 0
       - name: Sintaxis de todos los scripts
         run: for f in $(find extension -name '*.js'); do node --check "$f"; done
       - name: web-ext lint
-        run: npm run lint -- --warnings-as-errors
+        run: npm run lint:ext
+      - name: Filtros de la comunidad compatibles con el motor
+        run: npm run check-lists
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Buscar claves y secretos (gitleaks)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Dependencias sin vulnerabilidades altas
+        run: npm audit --audit-level=high

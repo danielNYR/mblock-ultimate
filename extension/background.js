@@ -39,21 +39,32 @@ async function loadState() {
 }
 
 let rebuildTimer = null;
+const REBUILD_KEYS = new Set(["customBlock"]);
+const DOWNLOAD_KEYS = new Set(["lists", "customListUrls"]);
+const SCRIPTLET_KEYS = new Set(["enabled", "adBlock", "scriptlets", "disabledSites"]);
+
+function applySettingChanges(changes) {
+  const changed = Object.keys(changes).filter(k => SETTING_KEYS.includes(k));
+  for (const k of changed) {
+    settings[k] = changes[k].newValue === undefined ? DEFAULT_SETTINGS[k] : changes[k].newValue;
+  }
+  return {
+    rebuild: changed.some(k => REBUILD_KEYS.has(k)),
+    download: changed.some(k => DOWNLOAD_KEYS.has(k)),
+    rescript: changed.some(k => SCRIPTLET_KEYS.has(k))
+  };
+}
+
 browser.storage.onChanged.addListener((changes, area) => {
   if (area !== "local") return;
-  let rebuild = false, download = false, rescript = false;
-  for (const k of Object.keys(changes)) {
-    if (!SETTING_KEYS.includes(k)) continue;
-    settings[k] = changes[k].newValue !== undefined ? changes[k].newValue : DEFAULT_SETTINGS[k];
-    if (k === "customBlock") rebuild = true;
-    if (["enabled", "adBlock", "scriptlets", "disabledSites"].includes(k)) rescript = true;
-    if (k === "lists" || k === "customListUrls") download = true;
-  }
-  if (rescript && !rebuild && !download) registerScriptlets();
-  if (download) updateLists(false).then(rebuildEngine).catch(() => {});
-  else if (rebuild) {
+  const { rebuild, download, rescript } = applySettingChanges(changes);
+  if (download) {
+    updateLists(false).then(rebuildEngine).catch(() => {});
+  } else if (rebuild) {
     clearTimeout(rebuildTimer);
     rebuildTimer = setTimeout(rebuildEngine, 300);
+  } else if (rescript) {
+    registerScriptlets();
   }
 });
 
@@ -155,6 +166,43 @@ function rememberAllowed(requestId) {
   if (allowedRequests.size > 500) allowedRequests.delete(allowedRequests.values().next().value);
 }
 
+// ¿Desde qué pestaña/sitio se origina esta navegación? Una pestaña nueva sin
+// historial se atribuye a la pestaña que la abrió.
+async function navigationSource(tabId, origin) {
+  const own = tabHosts.get(tabId);
+  if (own) return { sourceTab: tabId, sourceHost: own, isNewTab: false };
+  let opener = tabOpener.get(tabId);
+  if (opener === undefined) {
+    try {
+      opener = (await browser.tabs.get(tabId)).openerTabId;
+    } catch {
+      // la pestaña ya se cerró
+    }
+  }
+  if (opener === undefined) return { sourceTab: tabId, sourceHost: hostOf(origin), isNewTab: false };
+  return { sourceTab: opener, sourceHost: tabHosts.get(opener) || hostOf(origin), isNewTab: true };
+}
+
+function blockNavigation(tabId, src) {
+  countBlocked(src.sourceTab);
+  if (src.isNewTab) {
+    browser.tabs.remove(tabId).catch(() => {});
+    browser.tabs.update(src.sourceTab, { active: true }).catch(() => {});
+  }
+  return { cancel: true };
+}
+
+// Filtros $popup de las listas (típicos de sitios de streaming)
+function isListedPopup(d, target, src) {
+  return src.isNewTab && settings.adBlock && !!engine &&
+    !!engine.match({ url: d.url, host: target, type: "popup", docHost: src.sourceHost, thirdParty: !sameSite(target, src.sourceHost) });
+}
+
+function hasUserIntent(sourceTab, target) {
+  const intent = intents.get(sourceTab);
+  return !!intent && Date.now() - intent.t < INTENT_MS && sameSite(intent.host, target);
+}
+
 async function guardMainFrame(d) {
   const target = hostOf(d.url);
   if (!target) return {};
@@ -163,52 +211,16 @@ async function guardMainFrame(d) {
 
   if (allowedRequests.has(d.requestId)) return {};
   const allow = () => { rememberAllowed(d.requestId); return {}; };
-  if (!settings.redirectGuard) return allow();
-
   // Navegación iniciada por el navegador (barra de direcciones, marcadores, extensiones).
   const origin = d.originUrl || "";
-  if (!/^https?:/.test(origin)) return allow();
+  if (!settings.redirectGuard || !/^https?:/.test(origin)) return allow();
 
-  const tabId = d.tabId;
-  let sourceTab = tabId;
-  let sourceHost = tabHosts.get(tabId);
-  let isNewTab = false;
-  if (!sourceHost) {
-    let opener = tabOpener.get(tabId);
-    if (opener === undefined) {
-      try { opener = (await browser.tabs.get(tabId)).openerTabId; } catch (e) { /* pestaña cerrada */ }
-    }
-    if (opener !== undefined) {
-      sourceTab = opener;
-      sourceHost = tabHosts.get(opener);
-      isNewTab = true;
-    }
-  }
-  if (!sourceHost) sourceHost = hostOf(origin);
-  if (!sourceHost || !isSiteEnabled(sourceHost)) return allow();
-
-  // Filtros $popup de las listas (típicos de sitios de streaming)
-  if (isNewTab && settings.adBlock && engine &&
-      engine.match({ url: d.url, host: target, type: "popup", docHost: sourceHost, thirdParty: !sameSite(target, sourceHost) })) {
-    countBlocked(sourceTab);
-    browser.tabs.remove(tabId).catch(() => {});
-    browser.tabs.update(sourceTab, { active: true }).catch(() => {});
-    return { cancel: true };
-  }
-  if (isTrusted(sourceHost)) return allow();
-  if (sameSite(target, sourceHost) || isTrusted(target)) return allow();
-
-  const intent = intents.get(sourceTab);
-  if (intent && Date.now() - intent.t < INTENT_MS && sameSite(intent.host, target)) {
-    return allow();
-  }
-
-  countBlocked(sourceTab);
-  if (isNewTab) {
-    browser.tabs.remove(tabId).catch(() => {});
-    browser.tabs.update(sourceTab, { active: true }).catch(() => {});
-  }
-  return { cancel: true };
+  const src = await navigationSource(d.tabId, origin);
+  if (!src.sourceHost || !isSiteEnabled(src.sourceHost)) return allow();
+  if (isListedPopup(d, target, src)) return blockNavigation(d.tabId, src);
+  if (isTrusted(src.sourceHost) || sameSite(target, src.sourceHost) || isTrusted(target)) return allow();
+  if (hasUserIntent(src.sourceTab, target)) return allow();
+  return blockNavigation(d.tabId, src);
 }
 
 // ---------- YouTube: quitar anuncios de la respuesta del reproductor ----------
@@ -295,8 +307,12 @@ async function wipeSite(site, hosts) {
   }
   let removed = 0;
   for (const q of queries) {
-    let cookies = [];
-    try { cookies = await browser.cookies.getAll(q); } catch (e) { continue; }
+    let cookies;
+    try {
+      cookies = await browser.cookies.getAll(q);
+    } catch {
+      continue; // almacén o partición no disponible
+    }
     for (const c of cookies) {
       const details = { url: cookieUrl(c), name: c.name, storeId: c.storeId, firstPartyDomain: c.firstPartyDomain };
       if (c.partitionKey) details.partitionKey = c.partitionKey;
@@ -421,72 +437,86 @@ function stateFor(topHost, tabId) {
   };
 }
 
-browser.runtime.onMessage.addListener((msg, sender) => {
-  const tab = sender.tab;
-  switch (msg.type) {
-    case "getState": {
-      if (!tab) return Promise.resolve(null);
-      const topHost = tabHosts.get(tab.id) || hostOf(tab.url);
-      return engineReady.then(() => {
-        const state = stateFor(topHost, tab.id);
-        if (msg.css && state.active && settings.adBlock) {
-          insertCss(tab.id, sender.frameId, engine.cosmeticCss(hostOf(sender.url) || topHost, flagsFor(tab.id)));
-        }
-        return state;
-      });
-    }
-    case "cosmeticTokens": {
-      if (!tab || !engine || !Array.isArray(msg.tokens)) return;
-      const host = hostOf(sender.url) || tabHosts.get(tab.id) || "";
-      insertCss(tab.id, sender.frameId, engine.genericCss(host, msg.tokens, flagsFor(tab.id)));
-      return;
-    }
-    case "strictBypass":
-      if (msg.host) strictBypass.add(siteOf(msg.host));
-      return Promise.resolve();
-    case "intent":
-      if (tab && msg.host) intents.set(tab.id, { host: msg.host, t: Date.now() });
-      return;
-    case "blocked":
-      if (tab) countBlocked(tab.id);
-      return;
-    case "consent":
-      if (tab) {
-        countBlocked(tab.id);
-        const topHost = tabHosts.get(tab.id) || hostOf(tab.url);
-        markPhantom(tab.id, topHost, msg.action === "accept" ? "aceptado en modo fantasma" : "banner de cookies");
+function topHostOf(tab) {
+  return tabHosts.get(tab.id) || hostOf(tab.url);
+}
+
+const MESSAGE_HANDLERS = {
+  getState(msg, sender) {
+    const tab = sender.tab;
+    if (!tab) return Promise.resolve(null);
+    const topHost = topHostOf(tab);
+    return engineReady.then(() => {
+      const state = stateFor(topHost, tab.id);
+      if (msg.css && state.active && settings.adBlock) {
+        insertCss(tab.id, sender.frameId, engine.cosmeticCss(hostOf(sender.url) || topHost, flagsFor(tab.id)));
       }
-      return;
-    case "popupState": {
-      const host = tabHosts.get(msg.tabId) || "";
-      return Promise.resolve({
-        host,
-        enabled: settings.enabled,
-        siteEnabled: isSiteEnabled(host),
-        trusted: isTrusted(host),
-        tabCount: tabCounts.get(msg.tabId) || 0,
-        phantom: phantomTabs.has(msg.tabId) ? phantomTabs.get(msg.tabId).reason : "",
-        cookieCount: (tabCookieStats.get(msg.tabId) || { count: 0 }).count,
-        total: totalBlocked
-      });
-    }
-    case "toggleSite": {
-      const site = siteOf(msg.host);
-      const list = settings.disabledSites.filter(e => siteOf(normalizeEntry(e)) !== site);
-      if (list.length === settings.disabledSites.length) list.push(site);
-      return browser.storage.local.set({ disabledSites: list });
-    }
-    case "addTrusted": {
-      const site = siteOf(msg.host);
-      if (!site || settings.allowlist.includes(site)) return Promise.resolve();
-      return browser.storage.local.set({ allowlist: settings.allowlist.concat(site) });
-    }
-    case "updateLists":
-      return updateLists(true);
-    case "resetStats":
-      totalBlocked = 0;
-      return browser.storage.local.set({ totalBlocked: 0 });
+      return state;
+    });
+  },
+  cosmeticTokens(msg, sender) {
+    const tab = sender.tab;
+    if (!tab || !engine || !Array.isArray(msg.tokens)) return undefined;
+    const host = hostOf(sender.url) || tabHosts.get(tab.id) || "";
+    insertCss(tab.id, sender.frameId, engine.genericCss(host, msg.tokens, flagsFor(tab.id)));
+    return undefined;
+  },
+  strictBypass(msg) {
+    if (msg.host) strictBypass.add(siteOf(msg.host));
+    return Promise.resolve();
+  },
+  intent(msg, sender) {
+    if (sender.tab && msg.host) intents.set(sender.tab.id, { host: msg.host, t: Date.now() });
+    return undefined;
+  },
+  blocked(msg, sender) {
+    if (sender.tab) countBlocked(sender.tab.id);
+    return undefined;
+  },
+  consent(msg, sender) {
+    if (!sender.tab) return undefined;
+    countBlocked(sender.tab.id);
+    const reason = msg.action === "accept" ? "aceptado en modo fantasma" : "banner de cookies";
+    markPhantom(sender.tab.id, topHostOf(sender.tab), reason);
+    return undefined;
+  },
+  popupState(msg) {
+    const host = tabHosts.get(msg.tabId) || "";
+    const phantom = phantomTabs.get(msg.tabId);
+    return Promise.resolve({
+      host,
+      enabled: settings.enabled,
+      siteEnabled: isSiteEnabled(host),
+      trusted: isTrusted(host),
+      tabCount: tabCounts.get(msg.tabId) || 0,
+      phantom: phantom ? phantom.reason : "",
+      cookieCount: (tabCookieStats.get(msg.tabId) || { count: 0 }).count,
+      total: totalBlocked
+    });
+  },
+  toggleSite(msg) {
+    const site = siteOf(msg.host);
+    const list = settings.disabledSites.filter(e => siteOf(normalizeEntry(e)) !== site);
+    if (list.length === settings.disabledSites.length) list.push(site);
+    return browser.storage.local.set({ disabledSites: list });
+  },
+  addTrusted(msg) {
+    const site = siteOf(msg.host);
+    if (!site || settings.allowlist.includes(site)) return Promise.resolve();
+    return browser.storage.local.set({ allowlist: settings.allowlist.concat(site) });
+  },
+  updateLists() {
+    return updateLists(true);
+  },
+  resetStats() {
+    totalBlocked = 0;
+    return browser.storage.local.set({ totalBlocked: 0 });
   }
+};
+
+browser.runtime.onMessage.addListener((msg, sender) => {
+  const handler = msg && Object.prototype.hasOwnProperty.call(MESSAGE_HANDLERS, msg.type) ? MESSAGE_HANDLERS[msg.type] : null;
+  return handler ? handler(msg, sender) : undefined;
 });
 
 // ---------- Listas de filtros ----------
@@ -506,10 +536,14 @@ function activeLists() {
   return out;
 }
 
+const HOUR_MS = 36e5;
+const DAY_MS = 864e5;
+
 function parseExpires(text) {
   const m = /^!\s*expires:\s*(\d+)\s*(day|hour)/im.exec(text.slice(0, 4000));
-  const ms = m ? +m[1] * (m[2].toLowerCase() === "hour" ? 36e5 : 864e5) : 4 * 864e5;
-  return Math.min(Math.max(ms, 6 * 36e5), 14 * 864e5);
+  if (!m) return 4 * DAY_MS;
+  const unit = m[2].toLowerCase() === "hour" ? HOUR_MS : DAY_MS;
+  return Math.min(Math.max(+m[1] * unit, 6 * HOUR_MS), 14 * DAY_MS);
 }
 
 async function downloadList(url) {

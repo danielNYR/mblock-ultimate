@@ -12,6 +12,10 @@
   <img alt="Firefox 142+" src="https://img.shields.io/badge/Firefox-142%2B-ff7139?logo=firefoxbrowser&logoColor=white">
   <img alt="Licencia GPL-3.0" src="https://img.shields.io/badge/licencia-GPL--3.0-0b3a75">
   <img alt="Sin telemetría" src="https://img.shields.io/badge/telemetr%C3%ADa-ninguna-2e7d32">
+  <br>
+  <a href="../../actions/workflows/ci.yml"><img alt="CI" src="https://github.com/danielNYR/mblock-ultimate/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="../../actions/workflows/codeql.yml"><img alt="CodeQL" src="https://github.com/danielNYR/mblock-ultimate/actions/workflows/codeql.yml/badge.svg"></a>
+  <img alt="Cobertura mínima 80 %" src="https://img.shields.io/badge/cobertura-%E2%89%A580%25-2e7d32">
 </p>
 
 ---
@@ -65,11 +69,13 @@ Puedes reportar un anuncio que se cuela, un sitio roto o un banner de cookies si
 Para proponer cambios en el código o en los filtros de la comunidad (`filtros/`), lee [CONTRIBUTING.md](CONTRIBUTING.md). El repositorio es abierto, pero **todo cambio necesita la aprobación del mantenedor** antes de entrar a `main` (detalles en [GOBERNANZA.md](GOBERNANZA.md)).
 
 ```bash
-npm test             # pruebas unitarias
-npm run lint         # validación de la extensión (web-ext)
-npm run check-lists  # verifica los filtros de la comunidad
+npm ci               # herramientas de desarrollo (Node 24+)
+npm run coverage     # pruebas con cobertura mínima del 80 %
+npm run lint         # ESLint con reglas de SonarSource + web-ext lint
 npm start            # abre Firefox con la extensión
 ```
+
+Cada pull request debe pasar pruebas, cobertura ≥ 80 %, reglas de Sonar, detección de secretos, auditoría de dependencias y CodeQL (ver [GOBERNANZA.md](GOBERNANZA.md#controles-de-calidad-obligatorios)).
 
 ## Versiones
 

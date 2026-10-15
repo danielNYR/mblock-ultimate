@@ -11,7 +11,7 @@
     .then(s => { enabled = !!s && s.active && s.facebook; if (enabled) scan(); })
     .catch(() => {});
 
-  const clean = t => (t || "").replace(/[\s​-‍﻿]+/g, "");
+  const clean = t => (t || "").replace(/[\s\u200b-\u200d\ufeff]+/g, "");
 
   function svgUseText(root) {
     for (const use of root.querySelectorAll("svg use")) {
@@ -42,24 +42,30 @@
     browser.runtime.sendMessage({ type: "blocked" }).catch(() => {});
   }
 
-  function scan() {
-    if (!enabled) return;
+  function scanFeed() {
     const posts = document.querySelectorAll("[role=\"feed\"] > div, div[data-pagelet^=\"FeedUnit\"], [role=\"article\"][aria-posinset]");
     for (const p of posts) {
-      if (!p.dataset.abgChecked || p.dataset.abgChecked < 3) {
-        p.dataset.abgChecked = String((+p.dataset.abgChecked || 0) + 1); // reintenta: FB carga el contenido en partes
-        if (isSponsored(p)) hide(p);
-      }
+      const checks = +p.dataset.abgChecked || 0;
+      if (checks >= 3) continue;
+      p.dataset.abgChecked = String(checks + 1); // reintenta: FB carga el contenido en partes
+      if (isSponsored(p)) hide(p);
     }
+  }
+
+  function scanRightRail() {
     const rail = document.querySelector("[data-pagelet=\"RightRail\"]");
-    if (rail) {
-      for (const h of rail.querySelectorAll("h3, span")) {
-        if (LABEL.test(clean(h.innerText))) {
-          const block = h.closest("[data-pagelet=\"RightRail\"] > div > div") || h.parentElement;
-          if (block) hide(block);
-        }
-      }
+    if (!rail) return;
+    for (const h of rail.querySelectorAll("h3, span")) {
+      if (!LABEL.test(clean(h.innerText))) continue;
+      const block = h.closest("[data-pagelet=\"RightRail\"] > div > div") || h.parentElement;
+      if (block) hide(block);
     }
+  }
+
+  function scan() {
+    if (!enabled) return;
+    scanFeed();
+    scanRightRail();
   }
 
   let pending = false;
