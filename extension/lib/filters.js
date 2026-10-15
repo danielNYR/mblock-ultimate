@@ -83,44 +83,61 @@ const SCRIPTLET_ALIASES = {
 const SCRIPTLET_TRUSTED = new Set(["replace-node-text"]);
 const TRUSTED_LISTS = /^(builtin|user|ubo-)/;
 
+// Lee un argumento entre comillas a partir de body[i] (la comilla).
+function ftReadQuoted(body, i) {
+  const q = body[i];
+  let j = i + 1;
+  while (j < body.length && !(body[j] === q && body[j - 1] !== "\\")) j++;
+  const next = body.indexOf(",", j);
+  return { arg: body.slice(i + 1, j).split("\\" + q).join(q), end: next < 0 ? body.length : next };
+}
+
+// Lee un argumento sin comillas hasta la siguiente coma no escapada.
+function ftReadPlain(body, i) {
+  let j = i;
+  while (j < body.length && !(body[j] === "," && body[j - 1] !== "\\")) j++;
+  return { arg: body.slice(i, j).trim().split("\\,").join(","), end: j };
+}
+
 // Separa los argumentos de "+js(nombre, a, b)" respetando comillas y "\,".
 function ftScriptletArgs(body) {
   const args = [];
   let i = 0;
   while (i <= body.length) {
     while (body[i] === " ") i++;
-    const q = body[i];
-    let arg = "";
-    if (q === "'" || q === "\"" || q === "`") {
-      let j = i + 1;
-      while (j < body.length && !(body[j] === q && body[j - 1] !== "\\")) j++;
-      arg = body.slice(i + 1, j).split("\\" + q).join(q);
-      i = body.indexOf(",", j);
-      if (i < 0) i = body.length;
-    } else {
-      let j = i;
-      while (j < body.length && !(body[j] === "," && body[j - 1] !== "\\")) j++;
-      arg = body.slice(i, j).trim().split("\\,").join(",");
-      i = j;
-    }
+    const isQuoted = body[i] === "'" || body[i] === "\"" || body[i] === "`";
+    const { arg, end } = isQuoted ? ftReadQuoted(body, i) : ftReadPlain(body, i);
     args.push(arg);
-    i++;
+    i = end + 1;
   }
   return args;
 }
 
 function ftNormalizeScriptlet(body) {
   const args = ftScriptletArgs(body);
-  let name = (args[0] || "").trim().replace(/^ubo-/, "").replace(/\.js$/, "");
+  const name = (args[0] || "").trim().replace(/^ubo-/, "").replace(/\.js$/, "");
   return { name: SCRIPTLET_ALIASES[name] || SCRIPTLET_ALIASES[name + ".js"] || null, raw: name, args: args.slice(1) };
+}
+
+// Firma de una excepción de scriptlet: "*" = todos; null = no reconocida.
+function ftScriptletSig(body, call) {
+  if (body.trim() === "") return "*";
+  return call.name ? [call.name].concat(call.args).join("\u0001") : null;
 }
 
 const PROCEDURAL = /:(has-text|-abp-|xpath|matches-css|upward|watch-attr|min-text-length|others|matches-path|remove-attr|remove-class|matches-attr|matches-prop|if\(|if-not|contains|nth-ancestor|matches-media)/;
 const BAD_TOKENS = new Set(["http", "https", "www", "com", "net", "org", "html", "php", "js"]);
-const OPTIONS_RE = /^~?[a-z0-9_-]+(=[^,$]*)?(,~?[a-z0-9_-]+(=[^,$]*)?)*$/i;
+const OPTIONS_RE = /^~?[\w-]+(?:=[^,$]*)?(?:,~?[\w-]+(?:=[^,$]*)?)*$/i;
 
 function ftEscape(s) {
   return s.replace(/[.+?${}()[\]\\/|]/g, "\\$&");
+}
+
+function ftTrimStars(p) {
+  let a = 0, b = p.length;
+  while (a < b && p[a] === "*") a++;
+  while (b > a && p[b - 1] === "*") b--;
+  return p.slice(a, b);
 }
 
 function ftPatternToRegex(p, matchCase) {
@@ -128,8 +145,7 @@ function ftPatternToRegex(p, matchCase) {
   if (p.startsWith("||")) { start = "^[a-z][a-z0-9+.-]*:\\/\\/(?:[^\\/?#]*\\.)?"; p = p.slice(2); }
   else if (p.startsWith("|")) { start = "^"; p = p.slice(1); }
   if (p.endsWith("|")) { end = "$"; p = p.slice(0, -1); }
-  p = p.replace(/^\*+|\*+$/g, "");
-  const body = ftEscape(p).replace(/\*+/g, ".*").replace(/\^/g, "(?:[^\\w.%-]|$)");
+  const body = ftEscape(ftTrimStars(p)).replace(/\*+/g, ".*").replace(/\^/g, "(?:[^\\w.%-]|$)");
   return new RegExp(start + body + end, matchCase ? "" : "i");
 }
 
@@ -139,9 +155,7 @@ function ftBestToken(p) {
   const anchoredEnd = p.endsWith("|");
   const s = p.replace(/^\|+/, "").replace(/\|$/, "").toLowerCase();
   let best = "";
-  const re = /[a-z0-9%]{3,}/g;
-  let m;
-  while ((m = re.exec(s))) {
+  for (const m of s.matchAll(/[a-z0-9%]{3,}/g)) {
     const before = s[m.index - 1];
     const after = s[m.index + m[0].length];
     const okBefore = before === undefined ? anchoredStart : before !== "*";
@@ -178,11 +192,23 @@ function ftDomainsOk(rule, host) {
 function ftParseDomainOption(value, rule) {
   for (let d of value.toLowerCase().split("|")) {
     if (!d || d[0] === "/") return false; // dominios regex: no soportado
-    const neg = d[0] === "~";
-    if (neg) d = d.slice(1);
-    (neg ? (rule.notDomains = rule.notDomains || []) : (rule.domains = rule.domains || [])).push(d);
+    const key = d[0] === "~" ? "notDomains" : "domains";
+    if (d[0] === "~") d = d.slice(1);
+    if (!rule[key]) rule[key] = [];
+    rule[key].push(d);
   }
   return true;
+}
+
+// "a.com,~b.com" -> {include:["a.com"], exclude:["b.com"]}
+function ftSplitDomains(domainsPart) {
+  const include = [], exclude = [];
+  for (let d of domainsPart.toLowerCase().split(",")) {
+    d = d.trim();
+    if (!d) continue;
+    if (d[0] === "~") exclude.push(d.slice(1)); else include.push(d);
+  }
+  return { include, exclude };
 }
 
 function ftHostCandidates(host) {
@@ -206,6 +232,98 @@ function ftPush(map, key, value) {
   if (arr) arr.push(value); else map.set(key, [value]);
 }
 
+function ftAddToSet(map, key, value) {
+  if (!map.has(key)) map.set(key, new Set());
+  map.get(key).add(value);
+}
+
+// Línea de lista hosts o dominio plano -> "||dominio^"; null = ignorar; si no, la línea tal cual.
+function ftNormalizeHostLine(line) {
+  const hosts = /^(?:0\.0\.0\.0|127\.0\.0\.1)\s+([^\s#]+)/.exec(line);
+  if (hosts) line = hosts[1];
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(line)) return line;
+  if (line === "0.0.0.0" || line === "localhost" || /^[\d.]+$/.test(line)) return null;
+  return "||" + line.toLowerCase() + "^";
+}
+
+// Separa patrón y opciones: "patrón$op1,op2"
+function ftSplitOptions(line) {
+  const isRegex = /^\/.*\/$/.test(line);
+  const dollar = line.lastIndexOf("$");
+  const hasOptions = dollar >= 0 && OPTIONS_RE.test(line.slice(dollar + 1)) &&
+    (!isRegex || /^\/.*\/\$/.test(line));
+  if (!hasOptions || (isRegex && dollar === line.length - 1)) return { pattern: line, opts: "", isRegex };
+  const pattern = line.slice(0, dollar);
+  return { pattern, opts: line.slice(dollar + 1), isRegex: /^\/.*\/$/.test(pattern) };
+}
+
+const FT_PARTY = { "third-party": 1, "3p": 1, "strict3p": 1, "first-party": 2, "1p": 2, "strict1p": 2 };
+
+function ftPageOption(ctx, flag) {
+  if (!ctx.exception) return false;
+  ctx.rule.page |= flag;
+  return true;
+}
+
+const FT_OPTION_HANDLERS = {
+  all(ctx) { ctx.pos |= FT_RESOURCES | FT.document | FT.popup; return true; },
+  domain(ctx, value) { return ftParseDomainOption(value, ctx.rule); },
+  from(ctx, value) { return ftParseDomainOption(value, ctx.rule); },
+  important(ctx) { ctx.rule.important = true; return true; },
+  "match-case"(ctx) { ctx.matchCase = true; return true; },
+  redirect() { return true; }, // se bloquea en lugar de redirigir
+  empty() { return true; },
+  mp4() { return true; },
+  elemhide(ctx) { return ftPageOption(ctx, 2); },
+  ehide(ctx) { return ftPageOption(ctx, 2); },
+  generichide(ctx) { return ftPageOption(ctx, 4); },
+  ghide(ctx) { return ftPageOption(ctx, 4); }
+};
+
+// Aplica una opción "$nombre=valor" al contexto; false = no soportada.
+function ftApplyOption(ctx, option) {
+  const eq = option.indexOf("=");
+  let name = (eq >= 0 ? option.slice(0, eq) : option).toLowerCase();
+  const value = eq >= 0 ? option.slice(eq + 1) : "";
+  const not = name[0] === "~";
+  if (not) name = name.slice(1);
+  if (FT_ALIASES[name]) {
+    const bit = FT[FT_ALIASES[name]];
+    if (not) ctx.neg |= bit; else ctx.pos |= bit;
+    if (ctx.exception && !not && name.startsWith("doc")) ctx.rule.page |= 1;
+    return true;
+  }
+  if (FT_PARTY[name]) {
+    ctx.rule.party = not ? 3 - FT_PARTY[name] : FT_PARTY[name];
+    return true;
+  }
+  const handler = Object.prototype.hasOwnProperty.call(FT_OPTION_HANDLERS, name) ? FT_OPTION_HANDLERS[name] : null;
+  return handler ? handler(ctx, value) : false; // desconocida o no soportada (FT_UNSUPPORTED)
+}
+
+function ftCompile(pattern, isRegex, matchCase) {
+  const flags = matchCase ? "" : "i";
+  try {
+    return isRegex ? new RegExp(pattern.slice(1, -1), flags) : ftPatternToRegex(pattern, matchCase);
+  } catch (e) {
+    return null; // regex inválida en la lista: se descarta el filtro
+  }
+}
+
+// Selector cosmético -> {entry, css, selector}; null si no es aplicable con seguridad.
+function ftCosmeticEntry(selector) {
+  if (selector[0] === "^") return null;
+  if (/[{}]|\/\*/.test(selector)) return null; // evita inyección de CSS
+  let css = null;
+  const style = /^(.+?):style\((.+)\)$/.exec(selector);
+  if (style) { selector = style[1]; css = style[2]; }
+  else selector = selector.replace(/:remove\(\)$/, "");
+  if (PROCEDURAL.test(selector) || selector.includes(":style(")) return null;
+  return { selector, css, entry: css ? selector + "{" + css + "}" : selector };
+}
+
+const FT_COSMETIC_LINE = /^([^#\s]*)(#@?#|#@?[?$%]#|#@?\$\?#)(.+)$/;
+
 class FilterEngine {
   constructor() {
     this.block = ftNewTable();
@@ -225,7 +343,7 @@ class FilterEngine {
   static fromLists(lists) {
     const engine = new FilterEngine();
     for (const { text } of lists) {
-      if (!text || text.indexOf("badfilter") < 0) continue;
+      if (!text || !text.includes("badfilter")) continue;
       for (const line of text.split(/\r?\n/)) {
         if (line.includes("badfilter")) engine.badfilters.add(line.trim().replace(/[$,]badfilter\b/, ""));
       }
@@ -237,107 +355,78 @@ class FilterEngine {
   addList(listId, text) {
     const st = { network: 0, cosmetic: 0, ignored: 0 };
     this.stats[listId] = st;
-    for (let line of text.split(/\r?\n/)) {
-      line = line.trim();
-      if (!line || line[0] === "!" || line[0] === "[") continue;
-      if (this.badfilters.has(line)) { st.ignored++; continue; }
-      const cos = /^([^#\s]*)(#@?#|#@?[?$%]#|#@?\$\?#)(.+)$/.exec(line);
-      if (cos && !/[/|^$]/.test(cos[1])) {
-        const kind = this.addCosmetic(cos[1], cos[2], cos[3], listId);
-        if (kind === "js") st.scriptlets = (st.scriptlets || 0) + 1;
-        else if (kind) st.cosmetic++;
-        else st.ignored++;
-        continue;
-      }
-      if (line[0] === "#") continue; // comentario estilo hosts
-      const hosts = /^(?:0\.0\.0\.0|127\.0\.0\.1)\s+([^\s#]+)/.exec(line);
-      if (hosts) line = hosts[1];
-      if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(line)) {
-        if (line === "0.0.0.0" || line === "localhost" || /^[\d.]+$/.test(line)) continue;
-        line = "||" + line.toLowerCase() + "^";
-      }
-      if (this.addNetwork(line, listId)) st.network++; else st.ignored++;
-    }
+    for (const line of text.split(/\r?\n/)) this._addLine(line.trim(), listId, st);
     return st;
   }
 
+  _addLine(line, listId, st) {
+    if (!line || line[0] === "!" || line[0] === "[") return;
+    if (this.badfilters.has(line)) { st.ignored++; return; }
+    const cos = FT_COSMETIC_LINE.exec(line);
+    if (cos && !/[/|^$]/.test(cos[1])) {
+      const kind = this.addCosmetic(cos[1], cos[2], cos[3], listId);
+      if (kind === "js") st.scriptlets = (st.scriptlets || 0) + 1;
+      else if (kind) st.cosmetic++;
+      else st.ignored++;
+      return;
+    }
+    if (line[0] === "#") return; // comentario estilo hosts
+    const network = ftNormalizeHostLine(line);
+    if (network === null) return;
+    if (this.addNetwork(network, listId)) st.network++; else st.ignored++;
+  }
+
   addNetwork(line, listId) {
-    const raw = line;
-    let exception = false;
-    if (line.startsWith("@@")) { exception = true; line = line.slice(2); }
-    let pattern = line;
-    let opts = "";
-    const isRegex = /^\/.*\/$/.test(line);
-    const dollar = line.lastIndexOf("$");
-    if (!isRegex && dollar >= 0 && OPTIONS_RE.test(line.slice(dollar + 1))) {
-      pattern = line.slice(0, dollar);
-      opts = line.slice(dollar + 1);
-    } else if (dollar > 0 && /^\/.*\/\$/.test(line) && OPTIONS_RE.test(line.slice(dollar + 1))) {
-      pattern = line.slice(0, dollar);
-      opts = line.slice(dollar + 1);
-    }
+    const exception = line.startsWith("@@");
+    const { pattern, opts, isRegex } = ftSplitOptions(exception ? line.slice(2) : line);
+    const rule = { raw: line, list: listId, mask: 0, party: 0, important: false, re: null, hostOnly: false, page: 0 };
+    const ctx = { rule, exception, pos: 0, neg: 0, matchCase: false };
+    if (opts && !opts.split(",").every(o => ftApplyOption(ctx, o))) return false;
+    if (ctx.pos) rule.mask = ctx.pos & ~ctx.neg;
+    else if (ctx.neg) rule.mask = FT_RESOURCES & ~ctx.neg;
 
-    const rule = { raw, list: listId, mask: 0, party: 0, important: false, re: null, hostOnly: false, page: 0 };
-    let pos = 0, neg = 0, matchCase = false;
-    if (opts) {
-      for (const o of opts.split(",")) {
-        const eq = o.indexOf("=");
-        let name = (eq >= 0 ? o.slice(0, eq) : o).toLowerCase();
-        const value = eq >= 0 ? o.slice(eq + 1) : "";
-        const not = name[0] === "~";
-        if (not) name = name.slice(1);
-        if (FT_ALIASES[name]) {
-          const bit = FT[FT_ALIASES[name]];
-          if (not) neg |= bit; else pos |= bit;
-          if (exception && name.startsWith("doc") && !not) rule.page |= 1;
-        } else if (name === "all") pos |= FT_RESOURCES | FT.document | FT.popup;
-        else if (name === "third-party" || name === "3p" || name === "strict3p") rule.party = not ? 2 : 1;
-        else if (name === "first-party" || name === "1p" || name === "strict1p") rule.party = not ? 1 : 2;
-        else if (name === "domain" || name === "from") { if (!ftParseDomainOption(value, rule)) return false; }
-        else if (name === "important") rule.important = true;
-        else if (name === "match-case") matchCase = true;
-        else if (name === "redirect" || name === "empty" || name === "mp4") { /* bloqueo simple */ }
-        else if (name === "elemhide" || name === "ehide") { if (!exception) return false; rule.page |= 2; }
-        else if (name === "generichide" || name === "ghide") { if (!exception) return false; rule.page |= 4; }
-        else if (name === "badfilter") return false;
-        else return false; // desconocida o no soportada (FT_UNSUPPORTED)
-      }
-    }
-    if (pos) rule.mask = pos & ~neg;
-    else if (neg) rule.mask = FT_RESOURCES & ~neg;
-
-    // Excepciones a nivel de página ($document, $elemhide, $generichide)
     if (rule.page) {
-      if (pattern && pattern !== "*") {
-        try { rule.re = isRegex ? new RegExp(pattern.slice(1, -1), "i") : ftPatternToRegex(pattern, matchCase); }
-        catch (e) { return false; }
-      }
-      this.pageRules.push(rule);
+      if (!this._addPageRule(rule, pattern, isRegex, ctx.matchCase)) return false;
       if (!(rule.mask & ~FT.document)) return true; // solo afecta a la página
     }
+    return this._indexRule(exception ? this.allow : this.block, rule, pattern, opts, isRegex, ctx.matchCase);
+  }
 
-    const table = exception ? this.allow : this.block;
-    const simple = !opts;
-    const hostMatch = /^\|\|([a-z0-9.-]+\.[a-z0-9-]+)(\^\|?|\/|:|$)/i.exec(pattern);
+  // Excepciones a nivel de página ($document, $elemhide, $generichide)
+  _addPageRule(rule, pattern, isRegex, matchCase) {
+    if (pattern && pattern !== "*") {
+      rule.re = ftCompile(pattern, isRegex, matchCase);
+      if (!rule.re) return false;
+    }
+    this.pageRules.push(rule);
+    return true;
+  }
 
-    if (hostMatch && !pattern.includes("*") && /^\^?\|?$/.test(pattern.slice(hostMatch[0].length - hostMatch[2].length))) {
-      const host = hostMatch[1].toLowerCase();
-      if (simple) { if (!table.pure.has(host)) table.pure.set(host, listId); return true; }
+  // "||dominio^" (con o sin opciones): índice por host, sin regex
+  _indexHostRule(table, rule, host, opts) {
+    if (opts) {
       rule.hostOnly = true;
       ftPush(table.byHost, host, rule);
-      return true;
+    } else if (!table.pure.has(host)) {
+      table.pure.set(host, rule.list);
+    }
+    return true;
+  }
+
+  _indexRule(table, rule, pattern, opts, isRegex, matchCase) {
+    const hostMatch = /^\|\|([a-z0-9.-]+\.[a-z0-9-]+)(\^\|?|\/|:|$)/i.exec(pattern);
+    const rest = hostMatch ? pattern.slice(hostMatch[0].length - hostMatch[2].length) : "";
+    if (hostMatch && !pattern.includes("*") && /^\^?\|?$/.test(rest)) {
+      return this._indexHostRule(table, rule, hostMatch[1].toLowerCase(), opts);
     }
     if (pattern === "" || pattern === "*" || pattern === "|" || pattern === "||") {
       if (!opts) return false; // bloquearía todo
       table.noToken.push(rule);
       return true;
     }
-    try {
-      rule.re = isRegex ? new RegExp(pattern.slice(1, -1), matchCase ? "" : "i") : ftPatternToRegex(pattern, matchCase);
-    } catch (e) {
-      return false;
-    }
-    if (hostMatch && !hostMatch[1].includes("*")) {
+    rule.re = ftCompile(pattern, isRegex, matchCase);
+    if (!rule.re) return false;
+    if (hostMatch) {
       ftPush(table.byHost, hostMatch[1].toLowerCase(), rule);
       return true;
     }
@@ -348,28 +437,17 @@ class FilterEngine {
 
   addScriptlet(domainsPart, exception, body, listId) {
     const call = ftNormalizeScriptlet(body);
-    const include = [], exclude = [];
-    for (let d of domainsPart.toLowerCase().split(",")) {
-      d = d.trim();
-      if (!d) continue;
-      if (d[0] === "~") exclude.push(d.slice(1)); else include.push(d);
-    }
+    const { include, exclude } = ftSplitDomains(domainsPart);
     if (exception) {
-      const sig = body.trim() === "" ? "*" : (call.name ? [call.name].concat(call.args).join("\u0001") : null);
+      const sig = ftScriptletSig(body, call);
       if (!sig) return false;
-      for (const d of include.length ? include : [""]) {
-        if (!this.scriptletExc.has(d)) this.scriptletExc.set(d, new Set());
-        this.scriptletExc.get(d).add(sig);
-      }
+      for (const d of include.length ? include : [""]) ftAddToSet(this.scriptletExc, d, sig);
       return "js";
     }
     if (!call.name) return false;
     if (SCRIPTLET_TRUSTED.has(call.name) && !TRUSTED_LISTS.test(listId || "")) return false;
     const entry = [call.name].concat(call.args);
-    for (const d of exclude) {
-      if (!this.scriptletExc.has(d)) this.scriptletExc.set(d, new Set());
-      this.scriptletExc.get(d).add(entry.join("\u0001"));
-    }
+    for (const d of exclude) ftAddToSet(this.scriptletExc, d, entry.join("\u0001"));
     for (const d of include.length ? include : [""]) ftPush(this.scriptlets, d, entry);
     return "js";
   }
@@ -387,78 +465,83 @@ class FilterEngine {
     return { specific, entity, generic, exc };
   }
 
-  addCosmetic(domainsPart, sep, selector, listId) {
-    if (sep === "#%#" && selector.startsWith("//scriptlet(") && selector.endsWith(")")) {
-      return this.addScriptlet(domainsPart, false, selector.slice(12, -1), listId);
+  // Sintaxis de scriptlets: "##+js(…)" (uBO) y "#%#//scriptlet(…)" (AdGuard). undefined = no es scriptlet.
+  _addScriptletSyntax(domainsPart, sep, selector, listId) {
+    const adguard = selector.startsWith("//scriptlet(") && selector.endsWith(")");
+    if (adguard && (sep === "#%#" || sep === "#@%#")) {
+      return this.addScriptlet(domainsPart, sep === "#@%#", selector.slice(12, -1), listId);
     }
-    if (sep === "#@%#" && selector.startsWith("//scriptlet(") && selector.endsWith(")")) {
-      return this.addScriptlet(domainsPart, true, selector.slice(12, -1), listId);
-    }
-    if (sep !== "##" && sep !== "#@#") return false; // otros extendidos de AdGuard
-    if (selector.startsWith("+js(") && selector.endsWith(")")) {
+    if ((sep === "##" || sep === "#@#") && selector.startsWith("+js(") && selector.endsWith(")")) {
       return this.addScriptlet(domainsPart, sep === "#@#", selector.slice(4, -1), listId);
     }
-    if (selector[0] === "^") return false;
-    if (/[{}]|\/\*/.test(selector)) return false; // evita inyección de CSS
-    let css = null;
-    const style = /^(.+?):style\((.+)\)$/.exec(selector);
-    if (style) { selector = style[1]; css = style[2]; }
-    else selector = selector.replace(/:remove\(\)$/, "");
-    if (PROCEDURAL.test(selector) || selector.includes(":style(")) return false;
-    const entry = css ? selector + "{" + css + "}" : selector;
-    const exception = sep === "#@#";
+    return undefined;
+  }
 
-    const include = [], exclude = [];
-    for (let d of domainsPart.toLowerCase().split(",")) {
-      d = d.trim();
-      if (!d) continue;
-      if (d[0] === "~") exclude.push(d.slice(1)); else include.push(d);
-    }
-
-    if (exception) {
-      if (!include.length) { this.cosGenericExc.add(entry); return true; }
-      for (const d of include) {
-        if (!this.cosSpecificExc.has(d)) this.cosSpecificExc.set(d, new Set());
-        this.cosSpecificExc.get(d).add(entry);
-      }
+  addCosmetic(domainsPart, sep, selector, listId) {
+    const scriptlet = this._addScriptletSyntax(domainsPart, sep, selector, listId);
+    if (scriptlet !== undefined) return scriptlet;
+    if (sep !== "##" && sep !== "#@#") return false; // otros extendidos de AdGuard
+    const parsed = ftCosmeticEntry(selector);
+    if (!parsed) return false;
+    const { include, exclude } = ftSplitDomains(domainsPart);
+    if (sep === "#@#") {
+      this._addCosmeticException(include, parsed.entry);
       return true;
     }
     if (include.length) {
-      for (const d of include) ftPush(this.cosSpecific, d, entry);
+      for (const d of include) ftPush(this.cosSpecific, d, parsed.entry);
       return true;
     }
-    if (css) return false; // :style genérico: demasiado arriesgado
-    const simple = /^([.#])([A-Za-z0-9_-]+)/.exec(selector);
+    if (parsed.css) return false; // :style genérico: demasiado arriesgado
+    this._addGenericCosmetic(parsed.selector, exclude);
+    return true;
+  }
+
+  _addCosmeticException(include, entry) {
+    if (!include.length) { this.cosGenericExc.add(entry); return; }
+    for (const d of include) ftAddToSet(this.cosSpecificExc, d, entry);
+  }
+
+  _addGenericCosmetic(selector, exclude) {
+    const simple = /^([.#])([\w-]+)/.exec(selector);
     if (simple && !exclude.length) {
       ftPush(this.cosGenericToken, (simple[1] === "." ? "c:" : "i:") + simple[2], selector);
     } else {
       this.cosGenericComplex.push({ sel: selector, notDomains: exclude.length ? exclude : null });
     }
-    return true;
   }
 
   // ---------- Red ----------
 
+  _typeOk(r, bit) {
+    if (r.mask) return (r.mask & bit) !== 0;
+    return (bit & FT_RESOURCES) !== 0 || (bit === FT.document && r.hostOnly);
+  }
+
   _ruleOk(r, req, bit) {
-    if (r.mask ? !(r.mask & bit) : !(bit & FT_RESOURCES || (bit === FT.document && r.hostOnly))) return false;
+    if (!this._typeOk(r, bit)) return false;
     if (r.party === 1 && !req.thirdParty) return false;
     if (r.party === 2 && req.thirdParty) return false;
     if ((r.domains || r.notDomains) && !ftDomainsOk(r, req.docHost || "")) return false;
     return !r.re || r.re.test(req.url);
   }
 
+  _firstOk(rules, req, bit) {
+    if (!rules) return null;
+    return rules.find(r => this._ruleOk(r, req, bit)) || null;
+  }
+
   _find(table, req, bit, hosts, tokens) {
     for (const h of hosts) {
       if (bit !== FT.popup && table.pure.has(h)) return { raw: "||" + h + "^", list: table.pure.get(h), important: false };
-      const rules = table.byHost.get(h);
-      if (rules) for (const r of rules) if (this._ruleOk(r, req, bit)) return r;
+      const hit = this._firstOk(table.byHost.get(h), req, bit);
+      if (hit) return hit;
     }
     for (const t of tokens) {
-      const rules = table.byToken.get(t);
-      if (rules) for (const r of rules) if (this._ruleOk(r, req, bit)) return r;
+      const hit = this._firstOk(table.byToken.get(t), req, bit);
+      if (hit) return hit;
     }
-    for (const r of table.noToken) if (this._ruleOk(r, req, bit)) return r;
-    return null;
+    return this._firstOk(table.noToken, req, bit);
   }
 
   // req: {url, host, type (tipo de webRequest o de filtro), docHost, thirdParty}
@@ -504,8 +587,7 @@ class FilterEngine {
   _exceptionsFor(host) {
     const exc = new Set(this.cosGenericExc);
     for (const k of this._specificKeys(host)) {
-      const s = this.cosSpecificExc.get(k);
-      if (s) for (const sel of s) exc.add(sel);
+      for (const sel of this.cosSpecificExc.get(k) || []) exc.add(sel);
     }
     return exc;
   }
@@ -514,22 +596,26 @@ class FilterEngine {
     return entries.map(e => (e.endsWith("}") ? e : e + "{display:none!important}")).join("\n");
   }
 
+  _specificSelectors(host, exc) {
+    const out = [];
+    for (const k of this._specificKeys(host)) {
+      for (const s of this.cosSpecific.get(k) || []) if (!exc.has(s)) out.push(s);
+    }
+    return out;
+  }
+
+  _complexSelectors(host, exc) {
+    return this.cosGenericComplex
+      .filter(({ sel, notDomains }) => !exc.has(sel) && !(notDomains && notDomains.some(d => ftDomainMatches(host, d))))
+      .map(({ sel }) => sel);
+  }
+
   // CSS inicial de una página: específico del sitio + genérico complejo.
   cosmeticCss(host, flags) {
     if (flags && flags.elemhide) return "";
     const exc = this._exceptionsFor(host);
-    const out = [];
-    for (const k of this._specificKeys(host)) {
-      const sels = this.cosSpecific.get(k);
-      if (sels) for (const s of sels) if (!exc.has(s)) out.push(s);
-    }
-    if (!(flags && flags.generichide)) {
-      for (const { sel, notDomains } of this.cosGenericComplex) {
-        if (exc.has(sel)) continue;
-        if (notDomains && notDomains.some(d => ftDomainMatches(host, d))) continue;
-        out.push(sel);
-      }
-    }
+    const out = this._specificSelectors(host, exc);
+    if (!(flags && flags.generichide)) out.push(...this._complexSelectors(host, exc));
     return FilterEngine.toCss([...new Set(out)]);
   }
 
@@ -539,8 +625,7 @@ class FilterEngine {
     const exc = this._exceptionsFor(host);
     const out = new Set();
     for (const t of tokens) {
-      const sels = this.cosGenericToken.get(t);
-      if (sels) for (const s of sels) if (!exc.has(s)) out.add(s);
+      for (const s of this.cosGenericToken.get(t) || []) if (!exc.has(s)) out.add(s);
     }
     return FilterEngine.toCss([...out]);
   }

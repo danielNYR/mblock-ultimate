@@ -18,6 +18,23 @@ function fmtDate(t) {
   return t ? new Date(t).toLocaleString() : "nunca";
 }
 
+function countText(st) {
+  if (!st) return "";
+  const ignored = st.ignored ? ` (${st.ignored} no soportados)` : "";
+  return `${st.network + st.cosmetic + (st.scriptlets || 0)} filtros${ignored} · `;
+}
+
+function listInfo(st, m) {
+  const error = m.error ? ` · error: ${m.error}` : "";
+  return `${countText(st)}actualizada: ${fmtDate(m.updated)}${error}`;
+}
+
+function ownFiltersInfo(own) {
+  if (!own) return "";
+  const ignored = own.ignored ? `, ${own.ignored} no soportados` : "";
+  return `Mis filtros: ${own.network + own.cosmetic + (own.scriptlets || 0)} activos${ignored}`;
+}
+
 function renderCatalog(s, meta, stats) {
   const root = $("catalog");
   root.textContent = "";
@@ -46,10 +63,7 @@ function renderCatalog(s, meta, stats) {
     name.textContent = l.name;
     const info = document.createElement("span");
     info.className = "muted";
-    const m = meta[l.id] || {};
-    const st = stats[l.id];
-    info.textContent = (st ? `${st.network + st.cosmetic} filtros` + (st.ignored ? ` (${st.ignored} no soportados)` : "") + " · " : "") +
-      `actualizada: ${fmtDate(m.updated)}` + (m.error ? ` · error: ${m.error}` : "");
+    info.textContent = listInfo(stats[l.id], meta[l.id] || {});
     row.append(cb, name, info);
     root.appendChild(row);
   }
@@ -59,8 +73,7 @@ async function refreshCatalog() {
   const s = Object.assign({}, DEFAULT_SETTINGS, await browser.storage.local.get(["lists", "customListUrls"]));
   const { listMeta, listStats } = await browser.storage.local.get(["listMeta", "listStats"]);
   renderCatalog(s, listMeta || {}, listStats || {});
-  const own = (listStats || {}).user;
-  $("listsInfo").textContent = own ? `Mis filtros: ${own.network + own.cosmetic} activos` + (own.ignored ? `, ${own.ignored} no soportados` : "") : "";
+  $("listsInfo").textContent = ownFiltersInfo((listStats || {}).user);
 }
 
 async function load() {

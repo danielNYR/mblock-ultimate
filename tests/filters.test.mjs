@@ -47,7 +47,7 @@ example.com##.proc:has-text(Ad)
 const e = FilterEngine.fromLists([{ id: "t", text: LIST }]);
 const m = (url, type = "script", docHost = "page.test") => {
   const host = new URL(url).hostname;
-  const r = e.match({ url, host, type, docHost, thirdParty: siteOf(host) !== siteOf(docHost) });
+  const r = e.match({ url, host, type, docHost, thirdParty: globalThis.siteOf(host) !== globalThis.siteOf(docHost) });
   return r ? r.raw : null;
 };
 

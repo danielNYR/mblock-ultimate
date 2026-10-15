@@ -12,9 +12,13 @@ document.getElementById("back").addEventListener("click", () => {
 });
 
 document.getElementById("proceed").addEventListener("click", async () => {
-  let host = "";
-  try { host = new URL(url).hostname; } catch (e) { return; }
-  if (!/^https?:$/.test(new URL(url).protocol)) return;
-  await browser.runtime.sendMessage({ type: "strictBypass", host });
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return; // URL inválida: no hay a dónde continuar
+  }
+  if (!/^https?:$/.test(parsed.protocol)) return;
+  await browser.runtime.sendMessage({ type: "strictBypass", host: parsed.hostname });
   location.replace(url);
 });

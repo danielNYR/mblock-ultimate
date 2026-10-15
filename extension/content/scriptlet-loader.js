@@ -10,51 +10,63 @@
   if (!host) return;
   const SECOND_LEVEL = new Set(["com", "net", "org", "gov", "gob", "edu", "ac", "co", "or", "ne", "go", "mil", "nom"]);
 
-  const candidates = [];
-  for (let h = host; h;) {
-    candidates.push(h);
-    const i = h.indexOf(".");
-    if (i < 0) break;
-    h = h.slice(i + 1);
+  // "a.b.example.com" -> ["a.b.example.com", "b.example.com", "example.com", "com"]
+  function hostCandidates(h) {
+    const out = [];
+    while (h) {
+      out.push(h);
+      const i = h.indexOf(".");
+      if (i < 0) break;
+      h = h.slice(i + 1);
+    }
+    return out;
   }
+
   // entidades: "google.*" para www.google.com.mx
-  const parts = host.split(".");
-  const suffixLen = parts.length > 2 && parts[parts.length - 1].length === 2 && SECOND_LEVEL.has(parts[parts.length - 2]) ? 2 : 1;
-  const noSuffix = parts.slice(0, Math.max(parts.length - suffixLen, 0));
-  const entities = [];
-  for (let i = 0; i < noSuffix.length; i++) entities.push(noSuffix.slice(i).join(".") + ".*");
+  function entityKeys(h) {
+    const parts = h.split(".");
+    const twoLevel = parts.length > 2 && parts.at(-1).length === 2 && SECOND_LEVEL.has(parts.at(-2));
+    const noSuffix = parts.slice(0, Math.max(parts.length - (twoLevel ? 2 : 1), 0));
+    return noSuffix.map((_, i) => noSuffix.slice(i).join(".") + ".*");
+  }
 
-  const sources = [
-    ["__mbs$1", typeof __mbsG !== "undefined" ? __mbsG : null, true],
-    ["__mbs$2", typeof __mbsS !== "undefined" ? __mbsS : null, false]
-  ];
-  const state = window.__mbsDelivered || (window.__mbsDelivered = {});
-
-  for (const [key, data, generic] of sources) {
-    if (!data || state[key]) continue;
-    state[key] = true;
-    if (data.off.some(d => host === d || host.endsWith("." + d))) continue;
-
+  function exceptionsFor(data, keys) {
     const exc = new Set();
-    for (const k of candidates.concat(entities, [""])) for (const sig of data.exc[k] || []) exc.add(sig);
-    if (exc.has("*")) continue;
+    for (const k of keys.concat([""])) for (const sig of data.exc[k] || []) exc.add(sig);
+    return exc;
+  }
 
+  function collectCalls(lists, exc) {
     const calls = [];
     const seen = new Set();
-    const add = list => {
+    for (const list of lists) {
       for (const call of list || []) {
         const sig = call.join("\u0001");
         if (exc.has(sig) || seen.has(sig)) continue;
         seen.add(sig);
         calls.push(call);
       }
-    };
-    if (generic) {
-      add(data.generic);
-      for (const k of entities) add(data.entity[k]);
-    } else {
-      for (const k of candidates) add(data.specific[k]);
     }
+    return calls;
+  }
+
+  const candidates = hostCandidates(host);
+  const entities = entityKeys(host);
+  const state = window.__mbsDelivered || (window.__mbsDelivered = {});
+
+  function deliver(key, data, generic) {
+    if (!data || state[key]) return;
+    state[key] = true;
+    if (data.off.some(d => host === d || host.endsWith("." + d))) return;
+    const exc = exceptionsFor(data, candidates.concat(entities));
+    if (exc.has("*")) return;
+    const lists = generic
+      ? [data.generic].concat(entities.map(k => data.entity[k]))
+      : candidates.map(k => data.specific[k]);
+    const calls = collectCalls(lists, exc);
     if (calls.length) window.wrappedJSObject[key] = cloneInto(calls, window);
   }
+
+  deliver("__mbs$1", typeof __mbsG === "undefined" ? null : __mbsG, true);
+  deliver("__mbs$2", typeof __mbsS === "undefined" ? null : __mbsS, false);
 })();

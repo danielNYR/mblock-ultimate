@@ -6,6 +6,24 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/). E
 - **MENOR:** funciones nuevas.
 - **PARCHE:** correcciones.
 
+## [Sin publicar]
+
+### Agregado
+- Controles de calidad obligatorios en cada pull request:
+  - pruebas con cobertura mínima del 80 % en líneas, ramas y funciones;
+  - ESLint con las reglas de SonarSource;
+  - detección de secretos con gitleaks;
+  - `npm audit`;
+  - CodeQL (JavaScript y workflows);
+  - Dependency Review.
+- Análisis opcional en SonarQube Cloud con Quality Gate (`sonar-project.properties`).
+- 57 pruebas nuevas: background, content scripts, scriptlets e interfaz, sobre un Firefox simulado (jsdom y API `browser` falsa).
+- Dependabot también para npm. La configuración del repositorio activa el escaneo de secretos con bloqueo en push y las alertas de seguridad.
+
+### Cambiado
+- Refactorización del motor de filtros, del background, de los content scripts y de la biblioteca de scriptlets para cumplir las reglas de Sonar (complejidad cognitiva, expresiones regulares sin backtracking, excepciones explicadas). El comportamiento no cambia y se verificó en Firefox.
+- `web-ext` se usa con `npx` y versión fija: sus dependencias tenían vulnerabilidades y ya no forman parte del proyecto.
+
 ## [1.3.0] – 2026-10-14
 
 ### Agregado

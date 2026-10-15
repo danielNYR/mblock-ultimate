@@ -20,8 +20,28 @@
     { name: "Cookie Notice", banner: "#cookie-notice", reject: "#cn-refuse-cookie", accept: "#cn-accept-cookie" }
   ];
 
-  const REJECT_RE = /^(rechazar( todo| todas| todas las cookies)?|rechazo|no acepto|denegar|solo (las )?(cookies )?(necesarias|esenciales|t[eé]cnicas)|usar solo (las )?necesarias|continuar sin aceptar|reject( all)?( cookies)?|decline( all)?|deny( all)?|only (necessary|essential)( cookies)?|necessary only|refuser( tout)?|tout refuser|continuer sans accepter|ablehnen|alle ablehnen|nur notwendige)$/i;
-  const ACCEPT_RE = /^(aceptar( todo| todas| todas las cookies| y cerrar| y continuar)?|acepto|de acuerdo|entendido|permitir( todas| todo)?|accept( all)?( cookies)?|allow( all)?( cookies)?|agree|i agree|i accept|got it|ok(ay)?|accepter( tout)?|tout accepter|alle akzeptieren|akzeptieren)$/i;
+  // Textos de botón reconocidos (es, en, fr, de); cada patrón cubre una familia de frases.
+  const REJECT_PATTERNS = [
+    /^rechazar(?: todo| todas| todas las cookies)?$/i,
+    /^(?:rechazo|no acepto|denegar|continuar sin aceptar)$/i,
+    /^solo (?:las )?(?:cookies )?(?:necesarias|esenciales|t[eé]cnicas)$/i,
+    /^usar solo (?:las )?necesarias$/i,
+    /^(?:reject|decline|deny)(?: all)?(?: cookies)?$/i,
+    /^(?:only (?:necessary|essential)(?: cookies)?|necessary only)$/i,
+    /^(?:refuser(?: tout)?|tout refuser|continuer sans accepter)$/i,
+    /^(?:alle )?ablehnen$|^nur notwendige$/i
+  ];
+  const ACCEPT_PATTERNS = [
+    /^aceptar(?: todo| todas| todas las cookies| y cerrar| y continuar)?$/i,
+    /^(?:acepto|de acuerdo|entendido)$/i,
+    /^permitir(?: todas| todo)?$/i,
+    /^(?:accept|allow)(?: all)?(?: cookies)?$/i,
+    /^(?:i )?(?:agree|accept)$|^got it$|^ok(?:ay)?$/i,
+    /^(?:accepter(?: tout)?|tout accepter)$/i,
+    /^(?:alle )?akzeptieren$/i
+  ];
+  const REJECT_RE = { test: text => REJECT_PATTERNS.some(re => re.test(text)) };
+  const ACCEPT_RE = { test: text => ACCEPT_PATTERNS.some(re => re.test(text)) };
   const COOKIE_TEXT = /cookie|consent/i;
 
   let state = null;
